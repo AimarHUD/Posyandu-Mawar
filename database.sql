@@ -1,0 +1,38 @@
+CREATE DATABASE IF NOT EXISTS posyandu_mawar
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE posyandu_mawar;
+
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nama VARCHAR(100) NOT NULL,
+  username VARCHAR(50) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  role ENUM('admin','kader') NOT NULL DEFAULT 'kader',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS balita (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nama VARCHAR(100) NOT NULL,
+  tanggal_lahir DATE NOT NULL,
+  nama_ortu VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS lansia (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nama VARCHAR(100) NOT NULL,
+  tanggal_lahir DATE NOT NULL,
+  alamat VARCHAR(150),
+  status ENUM('aktif','meninggal') NOT NULL DEFAULT 'aktif',
+  tanggal_wafat DATE NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE OR REPLACE VIEW v_balita AS
+SELECT b.*,
+  TIMESTAMPDIFF(MONTH, tanggal_lahir, CURDATE()) AS umur_bulan,
+  60 - TIMESTAMPDIFF(MONTH, tanggal_lahir, CURDATE()) AS sisa_bulan,
+  CASE WHEN TIMESTAMPDIFF(MONTH, tanggal_lahir, CURDATE()) > 59
+       THEN 'lulus' ELSE 'aktif' END AS status
+FROM balita b;
