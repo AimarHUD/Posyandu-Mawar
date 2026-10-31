@@ -1,0 +1,17 @@
+@extends('layouts.app')
+@section('title', 'Form lansia')
+@section('content')
+<h2>{{ $item->exists ? 'Ubah' : 'Tambah' }} lansia</h2>
+<div class="card"><form method="POST" action="{{ $item->exists ? route('lansia.update', $item) : route('lansia.store') }}">
+@csrf @if($item->exists) @method('PUT') @endif
+<div class="grid">
+<div><label for="nama">Nama</label><input id="nama" name="nama" value="{{ old('nama', $item->nama) }}" required>@error('nama')<div class="err">{{ $message }}</div>@enderror</div>
+<div><label for="nik">NIK (opsional)</label><input id="nik" name="nik" maxlength="16" value="{{ old('nik', $item->nik) }}">@error('nik')<div class="err">{{ $message }}</div>@enderror</div>
+<div><label for="tanggal_lahir">Tanggal lahir</label><input id="tanggal_lahir" type="date" name="tanggal_lahir" value="{{ old('tanggal_lahir', $item->tanggal_lahir?->format('Y-m-d')) }}" required>@error('tanggal_lahir')<div class="err">{{ $message }}</div>@enderror<div class="hint">Lansia dicatat mulai umur 59 tahun.</div></div>
+<div><label for="jk">Jenis kelamin</label><select id="jk" name="jenis_kelamin">@foreach(['Laki-laki','Perempuan'] as $j)<option @selected(old('jenis_kelamin', $item->jenis_kelamin)==$j)>{{ $j }}</option>@endforeach</select></div>
+<div><label for="pendamping">Pendamping (opsional)</label><input id="pendamping" name="pendamping" value="{{ old('pendamping', $item->pendamping) }}"></div>
+</div>
+<label for="alamat">Alamat</label><textarea id="alamat" name="alamat" rows="2">{{ old('alamat', $item->alamat) }}</textarea>
+<p><button class="btn">Simpan</button> <a class="btn gr" href="{{ route('lansia.index') }}">Batal</a></p>
+</form></div>
+@endsection
