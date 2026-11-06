@@ -11,6 +11,18 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+INSERT INTO users (nama, username, password, role)
+VALUES (
+  'Administrator Posyandu',
+  'admin',
+  '$2y$10$DnuCptNx19QOkHdc44ttuOgw3PZlabWxCBcY1fo5.cbFI2z4Dccbu',
+  'admin'
+)
+ON DUPLICATE KEY UPDATE
+  nama = VALUES(nama),
+  password = VALUES(password),
+  role = VALUES(role);
+
 CREATE TABLE IF NOT EXISTS balita (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nama VARCHAR(100) NOT NULL,
