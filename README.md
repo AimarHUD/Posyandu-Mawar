@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Posyandu Mawar (Laragon)
 
 ## Cara menjalankan
@@ -24,3 +25,6 @@ lalu buka `http://localhost:8000/`.
 ## Catatan
 Data balita dan lansia di `js/app.js` masih disimpan di localStorage browser.
 Tabel `balita` dan `lansia` sudah siap untuk dihubungkan ke MySQL.
+=======
+# Posyandu-Mawar
+>>>>>>> 7c3fe0f842cad39b84e941348239e233591933c4
