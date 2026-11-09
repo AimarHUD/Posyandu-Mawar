@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Posyandu Mawar (Laragon)
 
 ## Cara menjalankan
@@ -18,13 +17,13 @@ lalu buka `http://localhost:8000/`.
 ## Struktur
 - `database.sql` : skema database (users, balita, lansia, view v_balita) dan akun admin awal
 - `config.php` : koneksi MySQL (default Laragon: root, tanpa password)
+- `api-balita.php` : memuat dan menyimpan biodata balita ke MySQL
 - `login.php`, `logout.php`, `auth.php` : sistem login
 - `index.php` : aplikasi (wajib login)
 - `css/style.css`, `css/login.css`, `js/app.js` : tampilan dan logika
 
 ## Catatan
-Data balita dan lansia di `js/app.js` masih disimpan di localStorage browser.
-Tabel `balita` dan `lansia` sudah siap untuk dihubungkan ke MySQL.
-=======
-# Posyandu-Mawar
->>>>>>> 7c3fe0f842cad39b84e941348239e233591933c4
+Data balita disimpan di tabel MySQL `balita`, termasuk biodata, NIK, IMD, dan
+ukuran saat lahir. Saat aplikasi dibuka, aplikasi juga menambahkan kolom biodata
+yang belum ada pada tabel `balita` lama. Data lansia masih disimpan di
+localStorage browser.

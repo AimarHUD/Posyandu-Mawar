@@ -27,6 +27,13 @@ CREATE TABLE IF NOT EXISTS balita (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nama VARCHAR(100) NOT NULL,
   tanggal_lahir DATE NOT NULL,
+  jenis_kelamin VARCHAR(10) NULL,
+  anak_ke SMALLINT UNSIGNED NULL,
+  nik VARCHAR(16) NULL,
+  imd VARCHAR(10) NULL,
+  berat_lahir DECIMAL(5,2) NULL,
+  panjang_lahir DECIMAL(5,2) NULL,
+  lingkar_kepala_lahir DECIMAL(5,2) NULL,
   nama_ortu VARCHAR(100),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
