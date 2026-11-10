@@ -23,6 +23,7 @@ try {
     'berat_lahir' => 'DECIMAL(5,2) NULL',
     'panjang_lahir' => 'DECIMAL(5,2) NULL',
     'lingkar_kepala_lahir' => 'DECIMAL(5,2) NULL',
+    'lulus_manual' => 'TINYINT(1) NOT NULL DEFAULT 0',
   ];
   $existingColumns = $pdo->query('SHOW COLUMNS FROM balita')->fetchAll(PDO::FETCH_COLUMN);
   foreach ($columns as $name => $definition) {
@@ -34,7 +35,7 @@ try {
   if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $rows = $pdo->query(
       'SELECT id, nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nik, imd,
-              berat_lahir, panjang_lahir, lingkar_kepala_lahir
+              berat_lahir, panjang_lahir, lingkar_kepala_lahir, lulus_manual
        FROM balita ORDER BY id DESC'
     )->fetchAll();
     respond(200, ['data' => array_map('formatBalita', $rows)]);
@@ -53,6 +54,27 @@ try {
   $input = json_decode(file_get_contents('php://input'), true);
   if (!is_array($input)) {
     respond(400, ['error' => 'Data yang dikirim tidak valid.']);
+  }
+
+  if (($input['action'] ?? '') === 'lulus') {
+    $id = filter_var($input['id'] ?? null, FILTER_VALIDATE_INT);
+    if (!$id || $id < 1) {
+      respond(422, ['error' => 'ID balita tidak valid.']);
+    }
+    $stmt = $pdo->prepare('UPDATE balita SET lulus_manual = 1 WHERE id = ?');
+    $stmt->execute([$id]);
+    $stmt = $pdo->prepare('SELECT id FROM balita WHERE id = ?');
+    $stmt->execute([$id]);
+    if (!$stmt->fetchColumn()) {
+      respond(404, ['error' => 'Data balita tidak ditemukan.']);
+    }
+    $stmt = $pdo->prepare(
+      'SELECT id, nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nik, imd,
+              berat_lahir, panjang_lahir, lingkar_kepala_lahir, lulus_manual
+       FROM balita WHERE id = ?'
+    );
+    $stmt->execute([$id]);
+    respond(200, ['data' => formatBalita($stmt->fetch())]);
   }
 
   $name = trim((string)($input['nama'] ?? ''));
@@ -171,5 +193,6 @@ function formatBalita(array $row): array
     'beratLahir' => $row['berat_lahir'],
     'panjangLahir' => $row['panjang_lahir'],
     'lingkarKepala' => $row['lingkar_kepala_lahir'],
+    'lulusManual' => (bool)$row['lulus_manual'],
   ];
 }
