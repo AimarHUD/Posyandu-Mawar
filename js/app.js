@@ -6,9 +6,13 @@ var rsub = 'balita';
 var screen = 'main';
 var formReturn = 'main';
 var selectedChildId = null;
+var selectedElderId = null;
 var today = new Date();
 var apiError = '';
+var lansiaApiError = '';
 var storageError = '';
+var balitaSearch = '';
+var lansiaSearch = '';
 
 function esc(value) {
   return String(value == null ? '' : value).replace(/[&<>"]/g, function (char) {
@@ -76,14 +80,28 @@ function tahun(birthDate) {
   return years;
 }
 
-function lulus(child) { return bulan(child.lahir) > 59; }
+function lulus(child) { return Boolean(child.lulusManual) || bulan(child.lahir) > 59; }
 function sisa(child) { return 60 - bulan(child.lahir); }
 function umurTxt(months) { return months >= 12 ? Math.floor(months / 12) + ' th ' + (months % 12) + ' bln' : months + ' bln'; }
 function aktifB() { return db.balita.filter(function (child) { return !lulus(child); }); }
 function lulusB() { return db.balita.filter(lulus); }
-function aktifL() { return db.lansia.filter(function (person) { return !person.wafat; }); }
-function wafatL() { return db.lansia.filter(function (person) { return person.wafat; }); }
+function aktifL() { return db.lansia.filter(function (person) { return !person.wafat && !person.selesai; }); }
+function riwayatL() { return db.lansia.filter(function (person) { return person.wafat || person.selesai; }); }
 function notif() { return aktifB().filter(function (child) { return sisa(child) <= 3; }); }
+
+function displayDate(value) {
+  if (!value) return 'Belum ada';
+  var date = new Date(value + 'T00:00:00');
+  return isNaN(date.getTime()) ? value : date.toLocaleDateString('id-ID', {
+    day: 'numeric', month: 'long', year: 'numeric'
+  });
+}
+
+function genderSymbol(gender) {
+  if (gender === 'Laki-laki') return '<span class="gender-symbol male" aria-label="Laki-laki" title="Laki-laki">♂</span>';
+  if (gender === 'Perempuan') return '<span class="gender-symbol female" aria-label="Perempuan" title="Perempuan">♀</span>';
+  return '';
+}
 
 async function requestBalita(payload) {
   var options = { method: payload ? 'POST' : 'GET', credentials: 'same-origin', headers: {} };
@@ -100,6 +118,24 @@ async function requestBalita(payload) {
     throw new Error('Respons server tidak dapat dibaca.');
   }
   if (!response.ok) throw new Error(result.error || 'Permintaan data balita gagal.');
+  return result.data;
+}
+
+async function requestLansia(payload, method) {
+  var options = { method: method || (payload ? 'POST' : 'GET'), credentials: 'same-origin', headers: {} };
+  if (payload) {
+    options.headers['Content-Type'] = 'application/json';
+    options.headers['X-CSRF-Token'] = document.querySelector('meta[name="csrf-token"]').content;
+    options.body = JSON.stringify(payload);
+  }
+  var response = await fetch('api-lansia.php', options);
+  var result;
+  try {
+    result = await response.json();
+  } catch (error) {
+    throw new Error('Respons server tidak dapat dibaca.');
+  }
+  if (!response.ok) throw new Error(result.error || 'Permintaan data lansia gagal.');
   return result.data;
 }
 
@@ -124,11 +160,50 @@ async function syncBalita() {
   render();
 }
 
+async function syncLansia() {
+  lansiaApiError = '';
+  render();
+  try {
+    var records = await requestLansia();
+    if (!records.length && db.lansia.length) {
+      records = [];
+      for (var i = 0; i < db.lansia.length; i++) {
+        var legacyRecord = db.lansia[i];
+        var payload = {
+          nama: legacyRecord.nama,
+          lahir: legacyRecord.lahir,
+          alamat: legacyRecord.alamat,
+          gender: legacyRecord.gender || null,
+          nik: legacyRecord.nik || '',
+          nomorHp: legacyRecord.nomorHp || '',
+          namaPendamping: legacyRecord.namaPendamping || '',
+          nomorHpPendamping: legacyRecord.nomorHpPendamping || ''
+        };
+        var saved = await requestLansia(payload);
+        if (legacyRecord.wafat) {
+          saved = await requestLansia({
+            action: 'status',
+            id: saved.id,
+            status: 'meninggal',
+            tanggalWafat: legacyRecord.tglWafat || iso(today)
+          });
+        }
+        records.push(saved);
+      }
+    }
+    db.lansia = records;
+    save();
+  } catch (error) {
+    lansiaApiError = error.message;
+  }
+  render();
+}
+
 function errorNotice() {
-  var message = apiError || storageError;
+  var message = [apiError, lansiaApiError, storageError].filter(Boolean).join(' ');
   if (!message) return '';
   return '<div class="alert error-notice" role="alert">' + esc(message) +
-    (apiError ? ' <button class="link" data-retry> Coba lagi</button>' : '') + '</div>';
+    (apiError || lansiaApiError ? ' <button class="link" data-retry> Coba lagi</button>' : '') + '</div>';
 }
 
 function render() {
@@ -137,8 +212,10 @@ function render() {
   var fab = document.getElementById('fab');
   var nav = document.getElementById('nav');
   app.classList.toggle('child-form-screen', screen === 'childForm');
-  app.classList.toggle('child-detail-screen', screen === 'childDetail');
+  app.classList.toggle('child-detail-screen', screen === 'childDetail' || screen === 'elderDetail');
   fab.style.display = screen === 'main' && (tab === 'balita' || tab === 'lansia') ? 'grid' : 'none';
+  fab.textContent = tab === 'balita' ? '+ Tambah Anak' : '+ Tambah Lansia';
+  fab.setAttribute('aria-label', tab === 'balita' ? 'Tambah Anak' : 'Tambah Lansia');
   nav.style.display = screen === 'childForm' ? 'none' : 'flex';
 
   if (screen === 'childForm') {
@@ -149,43 +226,56 @@ function render() {
     renderChildDetail(view);
     return;
   }
+  if (screen === 'elderDetail') {
+    renderElderDetail(view);
+    return;
+  }
 
   var html = errorNotice();
   if (tab === 'home') {
     var notifications = notif();
-    html += '<div class="grid"><div class="stat"><b>' + aktifB().length + '</b><span>Balita aktif (0-59 bln)</span></div><div class="stat"><b>' + aktifL().length + '</b><span>Lansia aktif (59+ th)</span></div><div class="stat"><b>' + lulusB().length + '</b><span>Balita lulus (tersimpan)</span></div><div class="stat"><b>' + wafatL().length + '</b><span>Lansia riwayat</span></div></div>';
+    html += '<div class="grid"><div class="stat"><b>' + aktifB().length + '</b><span>Balita aktif (0-59 bln)</span></div><div class="stat"><b>' + aktifL().length + '</b><span>Lansia aktif (59+ th)</span></div><div class="stat"><b>' + lulusB().length + '</b><span>Balita lulus (tersimpan)</span></div><div class="stat"><b>' + riwayatL().length + '</b><span>Lansia riwayat</span></div></div>';
     html += '<h2>🔔 Notifikasi</h2>';
     html += notifications.length ? notifications.map(function (child) {
       return '<div class="alert"><b>' + esc(child.nama) + '</b> berumur ' + umurTxt(bulan(child.lahir)) + '. Akan keluar dari sistem balita dalam ' + sisa(child) + ' bulan.</div>';
     }).join('') : '<div class="empty">Belum ada balita yang mendekati usia keluar.</div>';
-    html += '<h2>Tentang</h2><div class="stat" style="font-size:13px;color:var(--muted)">Balita dicatat sampai 59 bulan, lalu otomatis lulus dan datanya tetap tersimpan. Lansia dimulai dari umur 59 tahun dan keluar dari daftar aktif dengan ceklis meninggal.</div>';
+    html += '<h2>Tentang</h2><div class="stat" style="font-size:13px;color:var(--muted)">Balita dicatat sampai 59 bulan, lalu otomatis lulus dan datanya tetap tersimpan. Lansia dimulai dari umur 59 tahun dan dapat dipindahkan ke riwayat menggunakan tombol Selesai.</div>';
   }
 
   if (tab === 'balita') {
-    html += '<h2 style="margin-top:0">Daftar Balita Aktif</h2>';
-    html += aktifB().length ? aktifB().map(function (child) {
+    var children = aktifB();
+    html += '<h2 style="margin-top:0">Daftar data Balita</h2>';
+    html += '<div class="directory-tools"><label class="directory-search"><span aria-hidden="true">⌕</span><input type="search" data-search-type="balita" value="' + esc(balitaSearch) + '" placeholder="Ketik untuk mencari nama ..." aria-label="Cari nama balita"></label><div class="directory-total"><span aria-hidden="true">▣</span> Total data Balita: <b>' + children.length + ' anak</b></div></div>';
+    html += children.length ? children.map(function (child) {
       var remaining = sisa(child);
-      return '<div class="item child-item" role="button" tabindex="0" data-child-id="' + child.id + '" aria-label="Lihat biodata ' + esc(child.nama) + '"><div class="av">👶</div><div class="info"><b class="child-name">' + esc(child.nama) + '</b><small>' + umurTxt(bulan(child.lahir)) + ' · Ortu: ' + esc(child.ortu || '-') + '</small></div>' +
-        (remaining <= 3 ? '<span class="badge warn">Keluar ' + remaining + ' bln</span>' : '<span class="badge">Aktif</span>') + '</div>';
-    }).join('') : '<div class="empty">Belum ada data balita.</div>';
+      return '<div class="item balita-item" data-searchable data-search-name="' + esc(child.nama.toLocaleLowerCase()) + '">' +
+        '<a class="balita-card-link" href="#balita-' + child.id + '" data-detail-balita="' + child.id + '" aria-label="Buka pemantauan ' + esc(child.nama) + '">' +
+        '<div class="av">👶</div><div class="info"><b class="child-name">' + esc(child.nama) + genderSymbol(child.gender) + '</b><small>' + umurTxt(bulan(child.lahir)) + ' · Ortu: ' + esc(child.ortu || '-') + '</small></div>' +
+        (remaining <= 3 ? '<span class="badge warn">Keluar ' + remaining + ' bln</span>' : '<span class="badge">Aktif</span>') +
+        '</a></div>';
+    }).join('') : '<div class="empty" data-directory-empty>Belum ada data balita.</div>';
+    html += '<div class="empty" data-search-empty hidden>Nama balita tidak ditemukan.</div>';
   }
 
   if (tab === 'lansia') {
-    html += '<h2 style="margin-top:0">Daftar Lansia Aktif</h2>';
-    html += aktifL().length ? aktifL().map(function (person) {
-      return '<div class="item"><div class="av">👵</div><div class="info"><b>' + esc(person.nama) + '</b><small>' + tahun(person.lahir) + ' tahun · ' + esc(person.alamat || '-') + '</small></div><div class="item-actions"><button class="item-action" data-edit="lansia" data-id="' + person.id + '" aria-label="Edit data ' + esc(person.nama) + '">Edit</button><button class="item-action delete" data-delete="lansia" data-id="' + person.id + '" aria-label="Hapus data ' + esc(person.nama) + '">Hapus</button></div><label class="chk"><input type="checkbox" data-w="' + person.id + '">Meninggal</label></div>';
-    }).join('') : '<div class="empty">Belum ada data lansia.</div>';
+    var elders = aktifL();
+    html += '<h2 style="margin-top:0">Daftar data Lansia</h2>';
+    html += '<div class="directory-tools"><label class="directory-search"><span aria-hidden="true">⌕</span><input type="search" data-search-type="lansia" value="' + esc(lansiaSearch) + '" placeholder="Ketik untuk mencari nama ..." aria-label="Cari nama lansia"></label><div class="directory-total"><span aria-hidden="true">▣</span> Total data Lansia: <b>' + elders.length + ' orang</b></div></div>';
+    html += elders.length ? elders.map(function (person) {
+      return '<div class="item balita-item child-item elder-list-item" role="button" tabindex="0" data-elder-id="' + person.id + '" data-searchable data-search-name="' + esc(person.nama.toLocaleLowerCase()) + '" aria-label="Lihat biodata ' + esc(person.nama) + '"><div class="av">👵</div><div class="info"><b class="child-name">' + esc(person.nama) + genderSymbol(person.gender) + '</b><small>' + tahun(person.lahir) + ' tahun · ' + esc(person.alamat || '-') + '</small></div><span class="badge">Aktif</span></div>';
+    }).join('') : '<div class="empty" data-directory-empty>Belum ada data lansia.</div>';
+    html += '<div class="empty" data-search-empty hidden>Nama lansia tidak ditemukan.</div>';
   }
 
   if (tab === 'riwayat') {
-    html += '<div class="seg"><button data-r="balita" class="' + (rsub === 'balita' ? 'on' : '') + '">Balita Lulus</button><button data-r="lansia" class="' + (rsub === 'lansia' ? 'on' : '') + '">Lansia Meninggal</button></div>';
+    html += '<div class="seg"><button data-r="balita" class="' + (rsub === 'balita' ? 'on' : '') + '">Balita Lulus</button><button data-r="lansia" class="' + (rsub === 'lansia' ? 'on' : '') + '">Riwayat Lansia</button></div>';
     if (rsub === 'balita') {
       html += lulusB().length ? lulusB().map(function (child) {
-        return '<div class="item child-item" role="button" tabindex="0" data-child-id="' + child.id + '" aria-label="Lihat biodata ' + esc(child.nama) + '"><div class="av">🎓</div><div class="info"><b class="child-name">' + esc(child.nama) + '</b><small>Lahir ' + esc(child.lahir) + ' · Ortu: ' + esc(child.ortu || '-') + '</small></div><span class="badge gray">Lulus</span></div>';
+        return '<div class="item child-item" role="button" tabindex="0" data-child-id="' + child.id + '" aria-label="Lihat biodata ' + esc(child.nama) + '"><div class="av">🎓</div><div class="info"><b class="child-name">' + esc(child.nama) + genderSymbol(child.gender) + '</b><small>Lahir ' + esc(child.lahir) + ' · Ortu: ' + esc(child.ortu || '-') + '</small></div><span class="badge gray">Lulus</span></div>';
       }).join('') : '<div class="empty">Belum ada balita yang lulus.</div>';
     } else {
-      html += wafatL().length ? wafatL().map(function (person) {
-        return '<div class="item"><div class="av">🕊️</div><div class="info"><b>' + esc(person.nama) + '</b><small>Wafat ' + esc(person.tglWafat || '-') + ' · ' + esc(person.alamat || '-') + '</small></div><button class="link" data-u="' + person.id + '">Batalkan</button></div>';
+      html += riwayatL().length ? riwayatL().map(function (person) {
+        return '<div class="item"><div class="av">' + (person.wafat ? '🕊️' : '✅') + '</div><div class="info"><b>' + esc(person.nama) + genderSymbol(person.gender) + '</b><small>' + (person.wafat ? 'Wafat ' + esc(person.tglWafat || '-') : 'Selesai') + ' · ' + esc(person.alamat || '-') + '</small></div><button class="link" data-u="' + person.id + '">Batalkan</button></div>';
       }).join('') : '<div class="empty">Belum ada riwayat.</div>';
     }
   }
@@ -195,6 +285,8 @@ function render() {
   nav.innerHTML = tabs.map(function (item) {
     return '<button data-t="' + item[0] + '" class="' + (tab === item[0] ? 'on' : '') + '"><span>' + item[1] + '</span>' + item[2] + '</button>';
   }).join('');
+  if (tab === 'balita') updateDirectorySearch('balita', balitaSearch);
+  if (tab === 'lansia') updateDirectorySearch('lansia', lansiaSearch);
 }
 
 function renderChildForm(view) {
@@ -230,7 +322,7 @@ function renderChildDetail(view) {
     return;
   }
   view.innerHTML = '<section class="child-page detail-page"><button class="back-link" data-back type="button">← Kembali</button>' +
-    '<div class="child-content"><div class="detail-identity"><span class="av">👶</span><div><small>Data Anak</small><h1>' + esc(child.nama) + '</h1></div></div>' +
+    '<div class="child-content"><div class="detail-identity"><span class="av">👶</span><div><small>Data Anak</small><h1>' + esc(child.nama) + genderSymbol(child.gender) + '</h1></div></div>' +
     '<section class="bio-section"><div class="bio-heading"><h2>Biodata Anak</h2><button class="text-action" data-edit-child type="button">Ubah</button></div>' +
     '<dl class="bio-list">' +
     '<div><dt>Nama</dt><dd>' + esc(child.nama) + '</dd></div>' +
@@ -245,6 +337,29 @@ function renderChildDetail(view) {
     '<dl class="bio-list"><div><dt>Berat Badan Lahir</dt><dd>' + displayValue(child.beratLahir, ' kg') + '</dd></div>' +
     '<div><dt>Panjang Badan Lahir</dt><dd>' + displayValue(child.panjangLahir, ' cm') + '</dd></div>' +
     '<div><dt>Lingkar Kepala Lahir</dt><dd>' + displayValue(child.lingkarKepala, ' cm') + '</dd></div></dl></section></div></section>';
+}
+
+function renderElderDetail(view) {
+  var person = db.lansia.find(function (item) { return item.id === selectedElderId; });
+  if (!person) {
+    screen = 'main';
+    render();
+    return;
+  }
+  view.innerHTML = '<section class="child-page detail-page"><button class="back-link" data-back type="button">← Kembali</button>' +
+    '<div class="child-content"><div class="detail-identity"><span class="av">👵</span><div><small>Data Lansia</small><h1>' + esc(person.nama) + genderSymbol(person.gender) + '</h1></div></div>' +
+    '<section class="bio-section"><div class="bio-heading"><h2>Biodata Lansia</h2></div>' +
+    '<dl class="bio-list">' +
+    '<div><dt>Nama Lengkap</dt><dd>' + esc(person.nama) + '</dd></div>' +
+    '<div><dt>Jenis Kelamin</dt><dd>' + displayValue(person.gender) + '</dd></div>' +
+    '<div><dt>NIK</dt><dd>' + displayValue(person.nik) + '</dd></div>' +
+    '<div><dt>Tanggal Lahir</dt><dd>' + esc(displayDate(person.lahir)) + '</dd></div>' +
+    '<div><dt>Umur</dt><dd>' + tahun(person.lahir) + ' tahun</dd></div>' +
+    '<div><dt>Alamat</dt><dd>' + displayValue(person.alamat) + '</dd></div>' +
+    '<div><dt>Nomor HP</dt><dd>' + displayValue(person.nomorHp) + '</dd></div>' +
+    '<div><dt>Nama Pendamping</dt><dd>' + displayValue(person.namaPendamping) + '</dd></div>' +
+    '<div><dt>Nomor HP Pendamping</dt><dd>' + displayValue(person.nomorHpPendamping) + '</dd></div>' +
+    '</dl></section></div></section>';
 }
 
 function openChildForm(editing) {
@@ -331,23 +446,120 @@ function openForm(kind, id) {
   var sheet = document.getElementById('sheet');
   var record = id ? db[kind].find(function (item) { return item.id == id; }) : null;
   if (id && !record) return;
-  sheet.innerHTML = '<h2 style="margin:0">' + (record ? 'Edit Lansia' : 'Tambah Lansia') + '</h2><label for="f-nama">Nama lengkap</label><input id="f-nama" value="' + (record ? esc(record.nama) : '') + '"><label for="f-lahir">Tanggal lahir</label><input type="date" id="f-lahir" max="' + iso(today) + '" value="' + (record ? esc(record.lahir) : '') + '"><label for="f-x">Alamat / RT</label><input id="f-x" value="' + (record ? esc(record.alamat || '') : '') + '"><div class="err" id="f-err"></div><button class="btn" id="f-ok">Simpan</button><button class="btn ghost" id="f-no">Batal</button>';
+  sheet.innerHTML = '<h2 style="margin:0">' + (record ? 'Edit Lansia' : 'Tambah Lansia') + '</h2>' +
+    '<label for="f-nama">Nama Lengkap</label><input id="f-nama" maxlength="100" required value="' + (record ? esc(record.nama) : '') + '" placeholder="Nama lengkap lansia">' +
+    '<label for="f-nik">NIK</label><input id="f-nik" inputmode="numeric" maxlength="16" required value="' + (record ? esc(record.nik || '') : '') + '" placeholder="16 digit NIK">' +
+    '<label for="f-gender">Jenis Kelamin</label><select id="f-gender"><option value="">Pilih jenis kelamin</option><option value="Laki-laki" ' + (record && record.gender === 'Laki-laki' ? 'selected' : '') + '>Laki-laki</option><option value="Perempuan" ' + (record && record.gender === 'Perempuan' ? 'selected' : '') + '>Perempuan</option></select>' +
+    '<label for="f-lahir">Tanggal Lahir</label><input type="date" id="f-lahir" max="' + iso(today) + '" required value="' + (record ? esc(record.lahir) : '') + '">' +
+    '<label for="f-alamat">Alamat</label><input id="f-alamat" maxlength="150" required value="' + (record ? esc(record.alamat || '') : '') + '" placeholder="Alamat lengkap">' +
+    '<label for="f-hp">Nomor HP</label><input id="f-hp" type="tel" maxlength="20" required value="' + (record ? esc(record.nomorHp || '') : '') + '" placeholder="Nomor HP lansia">' +
+    '<label for="f-pendamping">Nama Pendamping</label><input id="f-pendamping" maxlength="100" required value="' + (record ? esc(record.namaPendamping || '') : '') + '" placeholder="Nama pendamping">' +
+    '<label for="f-hp-pendamping">Nomor HP Pendamping</label><input id="f-hp-pendamping" type="tel" maxlength="20" required value="' + (record ? esc(record.nomorHpPendamping || '') : '') + '" placeholder="Nomor HP pendamping">' +
+    '<div class="err" id="f-err" role="alert"></div><button class="btn" id="f-ok">Simpan</button><button class="btn ghost" id="f-no">Batal</button>';
   document.getElementById('modal').classList.add('show');
   document.getElementById('f-no').onclick = closeM;
-  document.getElementById('f-ok').onclick = function () {
+  document.getElementById('f-ok').onclick = async function () {
     var name = document.getElementById('f-nama').value.trim();
     var birth = document.getElementById('f-lahir').value;
-    var address = document.getElementById('f-x').value.trim();
+    var nik = document.getElementById('f-nik').value.trim();
+    var address = document.getElementById('f-alamat').value.trim();
+    var phone = document.getElementById('f-hp').value.trim();
+    var guardian = document.getElementById('f-pendamping').value.trim();
+    var guardianPhone = document.getElementById('f-hp-pendamping').value.trim();
+    var gender = document.getElementById('f-gender').value;
     var error = document.getElementById('f-err');
-    if (!name || !birth) { error.textContent = 'Nama dan tanggal lahir wajib diisi.'; return; }
+    if (!name || !birth || !nik || !address || !phone || !guardian || !guardianPhone) {
+      error.textContent = 'Lengkapi nama, NIK, tanggal lahir, alamat, dan kontak lansia serta pendamping.';
+      return;
+    }
+    if (!/^\d{16}$/.test(nik)) { error.textContent = 'NIK harus terdiri dari 16 angka.'; return; }
     if (new Date(birth + 'T00:00:00') > new Date(iso(today) + 'T00:00:00')) { error.textContent = 'Tanggal lahir tidak valid.'; return; }
     if (tahun(birth) < 59) { error.textContent = 'Lansia minimal berumur 59 tahun.'; return; }
-    if (record) { record.nama = name; record.lahir = birth; record.alamat = address; }
-    else db.lansia.push({ id: ++db.id, nama: name, lahir: birth, alamat: address, wafat: false });
-    save();
-    closeM();
-    render();
+    var button = document.getElementById('f-ok');
+    button.disabled = true;
+    error.textContent = 'Menyimpan data...';
+    try {
+      var payload = {
+        nama: name,
+        lahir: birth,
+        nik: nik,
+        gender: gender || null,
+        alamat: address,
+        nomorHp: phone,
+        namaPendamping: guardian,
+        nomorHpPendamping: guardianPhone
+      };
+      if (record) payload.id = record.id;
+      var saved = await requestLansia(payload);
+      var existingIndex = db.lansia.findIndex(function (person) { return person.id === saved.id; });
+      if (existingIndex < 0) db.lansia.push(saved);
+      else db.lansia[existingIndex] = saved;
+      save();
+      closeM();
+      render();
+    } catch (requestError) {
+      error.textContent = requestError.message;
+      button.disabled = false;
+    }
   };
+}
+
+function updateDirectorySearch(type, value) {
+  var query = value.trim().toLocaleLowerCase();
+  if (type === 'balita') balitaSearch = value;
+  else lansiaSearch = value;
+  var container = document.getElementById('view');
+  var entries = container.querySelectorAll('[data-searchable]');
+  var visibleCount = 0;
+  entries.forEach(function (entry) {
+    var visible = entry.dataset.searchName.indexOf(query) !== -1;
+    entry.hidden = !visible;
+    if (visible) visibleCount++;
+  });
+  var empty = container.querySelector('[data-directory-empty]');
+  var noResults = container.querySelector('[data-search-empty]');
+  if (empty) empty.hidden = query !== '';
+  if (noResults) noResults.hidden = query === '' || visibleCount !== 0;
+}
+
+function confirmHistoryTransfer(kind, id) {
+  var child = kind === 'balita';
+  var person = (child ? db.balita : db.lansia).find(function (record) { return record.id === id; });
+  if (!person) return;
+  document.getElementById('sheet').innerHTML =
+    '<div class="transfer-warning" role="alert"><b>PERINGATAN</b><p>Data ' + esc(person.nama) +
+    ' akan dipindahkan ke Riwayat dan tidak lagi muncul di daftar aktif.</p><p>Apakah Anda yakin ingin melanjutkan?</p></div>' +
+    '<button type="button" class="btn" data-confirm-transfer="' + kind + '" data-id="' + id + '">' +
+    (child ? 'Ya, Luluskan' : 'Ya, Selesaikan') + '</button>' +
+    '<button type="button" class="btn ghost" data-modal-close>Batal</button>';
+  document.getElementById('modal').classList.add('show');
+}
+
+async function setBalitaLulus(id) {
+  try {
+    var saved = await requestBalita({ action: 'lulus', id: id });
+    var index = db.balita.findIndex(function (child) { return child.id === saved.id; });
+    if (index >= 0) db.balita[index] = saved;
+    save();
+    apiError = '';
+    window.dispatchEvent(new Event('balita-lulus-saved'));
+  } catch (error) {
+    apiError = error.message;
+  }
+  render();
+}
+
+async function setLansiaStatus(id, status, date) {
+  try {
+    var saved = await requestLansia({ action: 'status', id: id, status: status, tanggalWafat: date || null });
+    var index = db.lansia.findIndex(function (person) { return person.id === saved.id; });
+    if (index >= 0) db.lansia[index] = saved;
+    save();
+    lansiaApiError = '';
+  } catch (error) {
+    lansiaApiError = error.message;
+  }
+  render();
 }
 
 function closeM() { document.getElementById('modal').classList.remove('show'); }
@@ -359,6 +571,12 @@ document.addEventListener('click', function (event) {
   if (target) { rsub = target.dataset.r; render(); return; }
   target = event.target.closest('[data-child-id]');
   if (target) { selectedChildId = Number(target.dataset.childId); formReturn = 'main'; screen = 'childDetail'; render(); window.scrollTo(0, 0); return; }
+  target = event.target.closest('[data-elder-id]');
+  if (target) { selectedElderId = Number(target.dataset.elderId); screen = 'elderDetail'; render(); window.scrollTo(0, 0); return; }
+  if (event.target.closest('[data-graduate-profile]')) {
+    confirmHistoryTransfer('balita', Number(event.target.closest('[data-graduate-profile]').dataset.graduateProfile));
+    return;
+  }
   if (event.target.closest('[data-edit-child]')) { openChildForm(true); return; }
   if (event.target.closest('[data-back]')) {
     screen = screen === 'childForm' ? formReturn : 'main';
@@ -366,25 +584,43 @@ document.addEventListener('click', function (event) {
     window.scrollTo(0, 0);
     return;
   }
-  if (event.target.closest('[data-retry]')) { syncBalita(); return; }
+  if (event.target.closest('[data-retry]')) { syncBalita(); syncLansia(); return; }
   if (event.target.id === 'child-save') { saveChild(); return; }
   target = event.target.closest('[data-edit]');
   if (target) { openForm(target.dataset.edit, Number(target.dataset.id)); return; }
+  target = event.target.closest('[data-graduate]');
+  if (target) { confirmHistoryTransfer('balita', Number(target.dataset.graduate)); return; }
+  target = event.target.closest('[data-finish]');
+  if (target) { confirmHistoryTransfer('lansia', Number(target.dataset.finish)); return; }
+  target = event.target.closest('[data-confirm-transfer]');
+  if (target) {
+    var transferKind = target.dataset.confirmTransfer;
+    var transferId = Number(target.dataset.id);
+    closeM();
+    if (transferKind === 'balita') setBalitaLulus(transferId);
+    else setLansiaStatus(transferId, 'selesai', null);
+    return;
+  }
   target = event.target.closest('[data-delete]');
   if (target) {
     var list = db[target.dataset.delete];
     var record = list.find(function (item) { return item.id == target.dataset.id; });
     if (record && confirm('Hapus data ' + record.nama + '? Data yang dihapus tidak dapat dikembalikan.')) {
-      db[target.dataset.delete] = list.filter(function (item) { return item.id != target.dataset.id; });
-      save();
-      render();
+      requestLansia({ id: Number(target.dataset.id) }, 'DELETE').then(function () {
+        db[target.dataset.delete] = list.filter(function (item) { return item.id != target.dataset.id; });
+        save();
+        render();
+      }).catch(function (error) {
+        lansiaApiError = error.message;
+        render();
+      });
     }
     return;
   }
   target = event.target.closest('[data-u]');
   if (target) {
     var person = db.lansia.find(function (item) { return item.id == target.dataset.u; });
-    if (person) { person.wafat = false; delete person.tglWafat; save(); render(); }
+    if (person) setLansiaStatus(person.id, 'aktif', null);
     return;
   }
   if (event.target.id === 'fab') {
@@ -394,11 +630,21 @@ document.addEventListener('click', function (event) {
   if (event.target.id === 'modal') closeM();
 });
 
+document.addEventListener('input', function (event) {
+  var type = event.target.dataset && event.target.dataset.searchType;
+  if (type) updateDirectorySearch(type, event.target.value);
+});
+
 document.addEventListener('keydown', function (event) {
   var childCard = event.target.closest('[data-child-id]');
   if (childCard && (event.key === 'Enter' || event.key === ' ')) {
     event.preventDefault();
     childCard.click();
+  }
+  var elderCard = event.target.closest('[data-elder-id]');
+  if (elderCard && (event.key === 'Enter' || event.key === ' ')) {
+    event.preventDefault();
+    elderCard.click();
   }
 });
 
@@ -407,9 +653,8 @@ document.addEventListener('change', function (event) {
   if (personId) {
     var person = db.lansia.find(function (item) { return item.id == personId; });
     if (person && confirm('Tandai ' + person.nama + ' sebagai meninggal? Data akan pindah ke Riwayat.')) {
-      person.wafat = true;
-      person.tglWafat = iso(today);
-      save();
+      setLansiaStatus(person.id, 'meninggal', iso(today));
+      return;
     }
     render();
   }
@@ -422,3 +667,4 @@ if (!Number.isFinite(db.id)) db.id = 20;
 save();
 render();
 syncBalita();
+syncLansia();
