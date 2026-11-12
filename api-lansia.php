@@ -30,6 +30,27 @@ try {
   }
 
   if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    if (isset($_GET['measurements'])) {
+      $id = filter_var(
+        is_string($_GET['measurements']) ? $_GET['measurements'] : null,
+        FILTER_VALIDATE_INT
+      );
+      if (!$id || $id < 1) {
+        respondLansia(422, ['error' => 'ID lansia tidak valid.']);
+      }
+      $stmt = $pdo->prepare('SELECT id FROM lansia WHERE id = ?');
+      $stmt->execute([$id]);
+      if (!$stmt->fetchColumn()) {
+        respondLansia(404, ['error' => 'Data lansia tidak ditemukan.']);
+      }
+      $stmt = $pdo->prepare(
+        'SELECT id, jenis, nilai, sistolik, diastolik, tanggal_ukur, catatan
+         FROM pengukuran_lansia WHERE lansia_id = ? ORDER BY tanggal_ukur DESC, id DESC'
+      );
+      $stmt->execute([$id]);
+      respondLansia(200, ['data' => $stmt->fetchAll()]);
+    }
+
     $rows = $pdo->query(
       'SELECT id, nama, tanggal_lahir, alamat, status, tanggal_wafat, jenis_kelamin,
               nik, nomor_hp, nama_pendamping, nomor_hp_pendamping
@@ -64,6 +85,11 @@ try {
       respondLansia(404, ['error' => 'Data lansia tidak ditemukan.']);
     }
     respondLansia(200, ['data' => true]);
+  }
+
+  if (($input['action'] ?? '') === 'measurement') {
+    $measurements = saveLansiaMeasurement($pdo, $input);
+    respondLansia(200, ['data' => $measurements]);
   }
 
   if (($input['action'] ?? '') === 'status') {
@@ -195,4 +221,91 @@ function formatLansia(array $row): array
     'namaPendamping' => $row['nama_pendamping'],
     'nomorHpPendamping' => $row['nomor_hp_pendamping'],
   ];
+}
+
+function saveLansiaMeasurement(PDO $pdo, array $input): array
+{
+  $idValue = $input['id'] ?? null;
+  $id = filter_var(is_int($idValue) || is_string($idValue) ? $idValue : null, FILTER_VALIDATE_INT);
+  $kind = is_string($input['jenis'] ?? null) ? $input['jenis'] : '';
+  $date = is_string($input['tanggal_ukur'] ?? null) ? $input['tanggal_ukur'] : '';
+  $noteValue = $input['catatan'] ?? '';
+  if (!$id || $id < 1) {
+    throw new InvalidArgumentException('ID lansia tidak valid.');
+  }
+  $stmt = $pdo->prepare('SELECT tanggal_lahir FROM lansia WHERE id = ?');
+  $stmt->execute([$id]);
+  $birthDate = $stmt->fetchColumn();
+  if (!$birthDate) {
+    respondLansia(404, ['error' => 'Data lansia tidak ditemukan.']);
+  }
+  $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+  $dateErrors = DateTimeImmutable::getLastErrors();
+  if (
+    !$parsedDate || ($dateErrors !== false && ($dateErrors['warning_count'] || $dateErrors['error_count'])) ||
+    $parsedDate->format('Y-m-d') !== $date || $date > (new DateTimeImmutable('today'))->format('Y-m-d') ||
+    $date < $birthDate
+  ) {
+    throw new InvalidArgumentException('Tanggal pengukuran tidak valid.');
+  }
+  if (!is_string($noteValue) || mb_strlen($noteValue, 'UTF-8') > 2000) {
+    throw new InvalidArgumentException('Catatan maksimal 2.000 karakter.');
+  }
+  $note = trim($noteValue);
+  $value = null;
+  $systolic = null;
+  $diastolic = null;
+
+  if ($kind === 'tekanan_darah') {
+    $systolicValue = $input['sistolik'] ?? null;
+    $diastolicValue = $input['diastolik'] ?? null;
+    $systolic = filter_var(
+      is_int($systolicValue) || is_string($systolicValue) ? $systolicValue : null,
+      FILTER_VALIDATE_INT
+    );
+    $diastolic = filter_var(
+      is_int($diastolicValue) || is_string($diastolicValue) ? $diastolicValue : null,
+      FILTER_VALIDATE_INT
+    );
+    if (
+      $systolic === false || $diastolic === false || $systolic < 50 || $systolic > 300 ||
+      $diastolic < 30 || $diastolic > 200 || $systolic <= $diastolic
+    ) {
+      throw new InvalidArgumentException('Tekanan sistolik harus 50–300 mmHg dan lebih tinggi dari diastolik 30–200 mmHg.');
+    }
+  } else {
+    $limits = [
+      'berat' => [1, 300],
+      'tinggi' => [50, 250],
+      'lingkar_perut' => [20, 250],
+    ];
+    if (!isset($limits[$kind])) {
+      throw new InvalidArgumentException('Jenis pengukuran tidak valid.');
+    }
+    $valueInput = $input['nilai'] ?? null;
+    $value = filter_var(
+      is_int($valueInput) || is_float($valueInput) || is_string($valueInput) ? $valueInput : null,
+      FILTER_VALIDATE_FLOAT
+    );
+    if ($value === false || $value < $limits[$kind][0] || $value > $limits[$kind][1]) {
+      throw new InvalidArgumentException(
+        'Nilai pengukuran harus antara ' . $limits[$kind][0] . '–' . $limits[$kind][1] . '.'
+      );
+    }
+    $value = round((float)$value, 2);
+  }
+
+  $stmt = $pdo->prepare(
+    'INSERT INTO pengukuran_lansia
+     (lansia_id, jenis, nilai, sistolik, diastolik, tanggal_ukur, catatan)
+     VALUES (?, ?, ?, ?, ?, ?, ?)'
+  );
+  $stmt->execute([$id, $kind, $value, $systolic, $diastolic, $date, $note === '' ? null : $note]);
+
+  $stmt = $pdo->prepare(
+    'SELECT id, jenis, nilai, sistolik, diastolik, tanggal_ukur, catatan
+     FROM pengukuran_lansia WHERE lansia_id = ? ORDER BY tanggal_ukur DESC, id DESC'
+  );
+  $stmt->execute([$id]);
+  return $stmt->fetchAll();
 }

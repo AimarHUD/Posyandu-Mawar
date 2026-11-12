@@ -7,12 +7,24 @@ var screen = 'main';
 var formReturn = 'main';
 var selectedChildId = null;
 var selectedElderId = null;
+var elderSection = 'profil';
+var elderMeasurementPage = false;
+var elderMeasurementKind = '';
+var elderMeasurementDate = iso(new Date());
+var elderSwipeStart = null;
 var today = new Date();
 var apiError = '';
 var lansiaApiError = '';
 var storageError = '';
 var balitaSearch = '';
 var lansiaSearch = '';
+var elderMeasurements = { personId: null, records: [], loading: false, error: '' };
+var elderMeasurementTypes = {
+  berat: { title: 'Berat Badan', unit: 'kg', image: 'assets/images/scale.svg', min: 1, max: 300, step: '0.01' },
+  tinggi: { title: 'Tinggi Badan', unit: 'cm', image: 'assets/images/stadiometer.svg', min: 50, max: 250, step: '0.1' },
+  lingkar_perut: { title: 'Lingkar Perut', unit: 'cm', image: 'assets/images/waist-circumference.svg', min: 20, max: 250, step: '0.1' },
+  tekanan_darah: { title: 'Tekanan Darah', unit: 'mmHg', image: 'assets/images/blood-pressure.svg' }
+};
 
 function esc(value) {
   return String(value == null ? '' : value).replace(/[&<>"]/g, function (char) {
@@ -136,6 +148,25 @@ async function requestLansia(payload, method) {
     throw new Error('Respons server tidak dapat dibaca.');
   }
   if (!response.ok) throw new Error(result.error || 'Permintaan data lansia gagal.');
+  return result.data;
+}
+
+async function requestElderMeasurements(personId, payload) {
+  var options = { method: payload ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', headers: {} };
+  if (payload) {
+    options.headers['Content-Type'] = 'application/json';
+    options.headers['X-CSRF-Token'] = document.querySelector('meta[name="csrf-token"]').content;
+    options.body = JSON.stringify(payload);
+  }
+  var url = 'api-lansia.php' + (payload ? '' : '?measurements=' + encodeURIComponent(personId));
+  var response = await fetch(url, options);
+  var result;
+  try {
+    result = await response.json();
+  } catch (error) {
+    throw new Error('Respons server tidak dapat dibaca.');
+  }
+  if (!response.ok) throw new Error(result.error || 'Permintaan pengukuran lansia gagal.');
   return result.data;
 }
 
@@ -346,9 +377,27 @@ function renderElderDetail(view) {
     render();
     return;
   }
+  if (elderMeasurementPage) {
+    renderElderMeasurementPage(view, person);
+    return;
+  }
+  var records = elderMeasurements.personId === person.id ? elderMeasurements.records : [];
+  var sectionHtml = elderSection === 'profil' ? elderProfileHtml(person) :
+    elderMeasurementsHtml(person, records);
   view.innerHTML = '<section class="child-page detail-page"><button class="back-link" data-back type="button">← Kembali</button>' +
-    '<div class="child-content"><div class="detail-identity"><span class="av">👵</span><div><small>Data Lansia</small><h1>' + esc(person.nama) + genderSymbol(person.gender) + '</h1></div></div>' +
-    '<section class="bio-section"><div class="bio-heading"><h2>Biodata Lansia</h2></div>' +
+    '<div class="child-content"><div class="detail-identity"><span class="av">👵</span><div><small>Pemantauan lansia</small><h1>' +
+    esc(person.nama) + genderSymbol(person.gender) + '</h1><small>' + tahun(person.lahir) + ' tahun · Lahir ' +
+    esc(displayDate(person.lahir)) + '</small></div></div>' +
+    '<div class="growth-tabs" role="tablist" aria-label="Detail lansia">' +
+    '<button type="button" role="tab" data-elder-tab="profil" aria-selected="' + (elderSection === 'profil') +
+    '" class="' + (elderSection === 'profil' ? 'active' : '') + '">Profil</button>' +
+    '<button type="button" role="tab" data-elder-tab="pengukuran" aria-selected="' + (elderSection === 'pengukuran') +
+    '" class="' + (elderSection === 'pengukuran' ? 'active' : '') + '">Pengukuran</button></div>' +
+    '<div class="growth-content elder-swipe-area">' + sectionHtml + '</div></div></section>';
+}
+
+function elderProfileHtml(person) {
+  return '<section class="bio-section"><div class="bio-heading"><h2>Biodata Lansia</h2></div>' +
     '<dl class="bio-list">' +
     '<div><dt>Nama Lengkap</dt><dd>' + esc(person.nama) + '</dd></div>' +
     '<div><dt>Jenis Kelamin</dt><dd>' + displayValue(person.gender) + '</dd></div>' +
@@ -359,7 +408,157 @@ function renderElderDetail(view) {
     '<div><dt>Nomor HP</dt><dd>' + displayValue(person.nomorHp) + '</dd></div>' +
     '<div><dt>Nama Pendamping</dt><dd>' + displayValue(person.namaPendamping) + '</dd></div>' +
     '<div><dt>Nomor HP Pendamping</dt><dd>' + displayValue(person.nomorHpPendamping) + '</dd></div>' +
-    '</dl></section></div></section>';
+    '</dl></section>';
+}
+
+function elderMeasurementsHtml(person, records) {
+  var measureCards = Object.keys(elderMeasurementTypes).map(function (kind) {
+    var type = elderMeasurementTypes[kind];
+    var latest = records.find(function (item) { return item.jenis === kind; });
+    var value = 'Catat sekarang';
+    if (latest) {
+      value = kind === 'tekanan_darah' ?
+        latest.sistolik + '/' + latest.diastolik + ' mmHg · ' + displayDate(latest.tanggal_ukur) :
+        latest.nilai + ' ' + type.unit + ' · ' + displayDate(latest.tanggal_ukur);
+    }
+    return '<button type="button" class="measure-card" data-elder-measure="' + kind + '"' +
+      (elderMeasurements.loading ? ' disabled' : '') + '>' +
+      '<span class="measure-icon"><img src="' + type.image + '" alt="" aria-hidden="true"></span>' +
+      '<span class="measure-copy"><b>' + type.title + '</b><small>' + esc(value) +
+      '</small></span><span class="measure-arrow" aria-hidden="true">›</span></button>';
+  }).join('');
+  var historyHtml = elderMeasurements.loading ? '<p class="growth-hint">Memuat riwayat pengukuran...</p>' :
+    elderMeasurements.error ? '<div class="alert error-notice" role="alert">' + esc(elderMeasurements.error) +
+      ' <button type="button" class="link" data-elder-measure-retry>Coba lagi</button></div>' :
+      records.length ? '<div class="elder-measure-history">' + records.map(function (item) {
+        var type = elderMeasurementTypes[item.jenis];
+        var value = item.jenis === 'tekanan_darah' ?
+          item.sistolik + '/' + item.diastolik + ' mmHg' : item.nilai + ' ' + type.unit;
+        return '<article class="elder-measure-entry"><div><b>' + type.title + '</b><time>' +
+          esc(displayDate(item.tanggal_ukur)) + '</time></div><strong>' + esc(value) + '</strong>' +
+          (item.catatan ? '<p>' + esc(item.catatan) + '</p>' : '') + '</article>';
+      }).join('') + '</div>' : '<div class="empty">Belum ada riwayat pengukuran.</div>';
+  var dateInvalid = elderMeasurementDate < person.lahir || elderMeasurementDate > iso(today);
+  return '<section class="elder-measure-section"><h2>Catat hasil pengukuran</h2>' +
+    '<p class="growth-hint">Tentukan satu tanggal untuk semua hasil pengukuran pada kunjungan ini.</p>' +
+    '<label class="growth-label" for="elder-visit-date">Tanggal pengukuran</label>' +
+    '<input class="growth-input" id="elder-visit-date" type="date" min="' + esc(person.lahir) +
+    '" max="' + iso(today) + '" value="' + esc(elderMeasurementDate) + '">' +
+    (dateInvalid ? '<div class="growth-error" role="alert">Tanggal harus berada di antara tanggal lahir dan hari ini.</div>' : '') +
+    '<div class="elder-measure-cards">' + measureCards + '</div>' +
+    '<h3 class="growth-section-title">Riwayat Pengukuran</h3>' + historyHtml + '</section>';
+}
+
+function switchElderSection(section) {
+  if (section !== 'profil' && section !== 'pengukuran') return;
+  elderSection = section;
+  elderMeasurementPage = false;
+  render();
+}
+
+function loadElderMeasurements(personId) {
+  elderMeasurements = { personId: personId, records: [], loading: true, error: '' };
+  render();
+  requestElderMeasurements(personId).then(function (records) {
+    if (selectedElderId !== personId) return;
+    elderMeasurements = { personId: personId, records: records, loading: false, error: '' };
+    render();
+  }).catch(function (error) {
+    if (selectedElderId !== personId) return;
+    elderMeasurements = { personId: personId, records: [], loading: false, error: error.message };
+    render();
+  });
+}
+
+function openElderMeasurementForm(kind) {
+  var type = elderMeasurementTypes[kind];
+  if (!type) return;
+  elderMeasurementKind = kind;
+  elderMeasurementPage = true;
+  render();
+}
+
+function renderElderMeasurementPage(view, person) {
+  var kind = elderMeasurementKind;
+  var type = elderMeasurementTypes[kind];
+  if (!type) {
+    elderMeasurementPage = false;
+    render();
+    return;
+  }
+  var last = elderMeasurements.records.find(function (item) { return item.jenis === kind; });
+  var lastValue = last ? kind === 'tekanan_darah' ?
+    last.sistolik + '/' + last.diastolik + ' mmHg' : last.nilai + ' ' + type.unit : 'Belum ada';
+  var fields = kind === 'tekanan_darah' ?
+    '<div class="elder-blood-pressure-fields"><div><label class="growth-label" for="elder-systolic">Sistolik</label>' +
+    '<div class="large-number"><input id="elder-systolic" type="number" inputmode="numeric" min="50" max="300" step="1" placeholder="120"><span>mmHg</span></div></div>' +
+    '<div><label class="growth-label" for="elder-diastolic">Diastolik</label>' +
+    '<div class="large-number"><input id="elder-diastolic" type="number" inputmode="numeric" min="30" max="200" step="1" placeholder="80"><span>mmHg</span></div></div></div>' :
+    '<label class="growth-label" for="elder-measure-value">Hasil pengukuran</label>' +
+    '<div class="large-number"><input id="elder-measure-value" type="number" inputmode="decimal" min="' + type.min +
+    '" max="' + type.max + '" step="' + type.step + '" placeholder="0"><span>' + type.unit + '</span></div>';
+  view.innerHTML = '<section class="child-page detail-page"><div class="child-content elder-measure-form">' +
+    '<button type="button" class="growth-back-link" data-elder-measure-back>‹ Kembali ke daftar pengukuran</button>' +
+    '<div class="detail-identity"><span class="av">👵</span><div><small>Pemantauan lansia</small><h1>' +
+    esc(person.nama) + genderSymbol(person.gender) + '</h1></div></div>' +
+    '<h2 class="growth-section-title">' + type.title + '</h2>' +
+    '<div class="growth-card shared-measure-date"><span>Tanggal pengukuran</span><b>' +
+    esc(displayDate(elderMeasurementDate)) + '</b><small>Tanggal ditetapkan di halaman Pengukuran.</small></div>' +
+    '<div class="growth-card last-measure-grid"><div><span>Pengukuran terakhir</span><b>' +
+    esc(last ? displayDate(last.tanggal_ukur) : 'Belum ada') + '</b></div><div><span>Nilai terakhir</span><b>' +
+    esc(lastValue) + '</b></div></div>' + fields +
+    '<div class="growth-error inline-error" id="elder-measure-error" aria-live="polite"></div>' +
+    '<label class="growth-label" for="elder-measure-note">Catatan (opsional)</label>' +
+    '<textarea class="growth-input" id="elder-measure-note" rows="3" maxlength="2000" placeholder="Catatan saat pengukuran"></textarea>' +
+    '<div class="growth-actions"><button type="button" class="growth-button" data-elder-measure-save="' + kind +
+    '">Simpan</button><button type="button" class="growth-button secondary" data-elder-measure-repeat>Ulangi</button></div>' +
+    '</div></section>';
+}
+
+async function saveElderMeasurement(kind, button) {
+  var type = elderMeasurementTypes[kind];
+  var errorElement = document.getElementById('elder-measure-error');
+  var date = elderMeasurementDate;
+  var note = document.getElementById('elder-measure-note').value.trim();
+  var measurement = { jenis: kind, tanggal_ukur: date, catatan: note };
+  if (kind === 'tekanan_darah') {
+    measurement.sistolik = document.getElementById('elder-systolic').value;
+    measurement.diastolik = document.getElementById('elder-diastolic').value;
+    if (!Number.isInteger(Number(measurement.sistolik)) || !Number.isInteger(Number(measurement.diastolik)) ||
+      Number(measurement.sistolik) < 50 || Number(measurement.sistolik) > 300 ||
+      Number(measurement.diastolik) < 30 || Number(measurement.diastolik) > 200 ||
+      Number(measurement.sistolik) <= Number(measurement.diastolik)) {
+      errorElement.textContent = 'Masukkan tekanan sistolik 50–300 dan diastolik 30–200 mmHg. Sistolik harus lebih tinggi.';
+      return;
+    }
+  } else {
+    var value = document.getElementById('elder-measure-value').value.trim();
+    var number = Number(value);
+    if (!value || !Number.isFinite(number) || number < type.min || number > type.max) {
+      errorElement.textContent = 'Nilai ' + type.title.toLowerCase() + ' harus antara ' + type.min + '–' + type.max + ' ' + type.unit + '.';
+      return;
+    }
+    measurement.nilai = number;
+  }
+  var person = db.lansia.find(function (item) { return item.id === selectedElderId; });
+  if (!date || date < person.lahir || date > iso(today)) {
+    errorElement.textContent = 'Tanggal pengukuran wajib diisi, tidak boleh sebelum tanggal lahir atau melewati hari ini.';
+    return;
+  }
+  button.disabled = true;
+  errorElement.textContent = 'Menyimpan pengukuran...';
+  try {
+    var records = await requestElderMeasurements(selectedElderId, Object.assign({
+      action: 'measurement',
+      id: selectedElderId
+    }, measurement));
+    elderMeasurements = { personId: selectedElderId, records: records, loading: false, error: '' };
+    elderMeasurementPage = false;
+    render();
+  } catch (error) {
+    errorElement.textContent = error.message;
+    button.disabled = false;
+  }
 }
 
 function openChildForm(editing) {
@@ -572,7 +771,44 @@ document.addEventListener('click', function (event) {
   target = event.target.closest('[data-child-id]');
   if (target) { selectedChildId = Number(target.dataset.childId); formReturn = 'main'; screen = 'childDetail'; render(); window.scrollTo(0, 0); return; }
   target = event.target.closest('[data-elder-id]');
-  if (target) { selectedElderId = Number(target.dataset.elderId); screen = 'elderDetail'; render(); window.scrollTo(0, 0); return; }
+  if (target) {
+    selectedElderId = Number(target.dataset.elderId);
+    screen = 'elderDetail';
+    elderSection = 'profil';
+    elderMeasurementPage = false;
+    elderMeasurementKind = '';
+    elderMeasurementDate = iso(today);
+    elderMeasurements = { personId: selectedElderId, records: [], loading: false, error: '' };
+    render();
+    window.scrollTo(0, 0);
+    loadElderMeasurements(selectedElderId);
+    return;
+  }
+  target = event.target.closest('[data-elder-tab]');
+  if (target) { switchElderSection(target.dataset.elderTab); return; }
+  target = event.target.closest('[data-elder-measure]');
+  if (target) { openElderMeasurementForm(target.dataset.elderMeasure); return; }
+  target = event.target.closest('[data-elder-measure-save]');
+  if (target) { saveElderMeasurement(target.dataset.elderMeasureSave, target); return; }
+  if (event.target.closest('[data-elder-measure-back]')) {
+    elderMeasurementPage = false;
+    elderMeasurementKind = '';
+    render();
+    return;
+  }
+  if (event.target.closest('[data-elder-measure-repeat]')) {
+    var measurementInputs = document.querySelectorAll(
+      '#elder-measure-value, #elder-systolic, #elder-diastolic, #elder-measure-note'
+    );
+    measurementInputs.forEach(function (input) { input.value = ''; });
+    document.getElementById('elder-measure-error').textContent = '';
+    return;
+  }
+  if (event.target.closest('[data-elder-measure-retry]')) {
+    loadElderMeasurements(selectedElderId);
+    return;
+  }
+  if (event.target.closest('[data-modal-close]')) { closeM(); return; }
   if (event.target.closest('[data-graduate-profile]')) {
     confirmHistoryTransfer('balita', Number(event.target.closest('[data-graduate-profile]').dataset.graduateProfile));
     return;
@@ -634,6 +870,34 @@ document.addEventListener('input', function (event) {
   var type = event.target.dataset && event.target.dataset.searchType;
   if (type) updateDirectorySearch(type, event.target.value);
 });
+
+document.addEventListener('change', function (event) {
+  if (event.target.id !== 'elder-visit-date') return;
+  elderMeasurementDate = event.target.value;
+  render();
+});
+
+document.addEventListener('touchstart', function (event) {
+  if (screen !== 'elderDetail' || elderMeasurementPage || !event.target.closest('.elder-swipe-area')) return;
+  if (event.target.closest('input, textarea, select')) return;
+  var touch = event.touches[0];
+  elderSwipeStart = { x: touch.clientX, y: touch.clientY };
+}, { passive: true });
+
+document.addEventListener('touchend', function (event) {
+  if (!elderSwipeStart) return;
+  var touch = event.changedTouches[0];
+  var deltaX = touch.clientX - elderSwipeStart.x;
+  var deltaY = touch.clientY - elderSwipeStart.y;
+  elderSwipeStart = null;
+  if (Math.abs(deltaX) < 55 || Math.abs(deltaX) < Math.abs(deltaY) * 1.3) return;
+  if (deltaX < 0 && elderSection === 'profil') switchElderSection('pengukuran');
+  else if (deltaX > 0 && elderSection === 'pengukuran') switchElderSection('profil');
+}, { passive: true });
+
+document.addEventListener('touchcancel', function () {
+  elderSwipeStart = null;
+}, { passive: true });
 
 document.addEventListener('keydown', function (event) {
   var childCard = event.target.closest('[data-child-id]');

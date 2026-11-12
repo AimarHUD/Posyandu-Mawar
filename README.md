@@ -5,7 +5,8 @@
 2. Laragon: klik **Start All** (Apache + MySQL)
 3. Import `database.sql` ke MySQL melalui HeidiSQL atau phpMyAdmin. File ini membuat database, tabel, dan akun admin awal. Mengimpor ulang file ini akan mengatur ulang password akun `admin` ke password awal di bawah.
 4. Setelah itu, pilih database `posyandu_mawar` dan jalankan `database/migrations/2026_11_09_create_tumbuh_kembang_tables.sql` untuk membuat tabel pengukuran dan Vitamin A.
-5. Buka `http://localhost/posyandu-mawar/`
+5. Jalankan `database/migrations/2026_11_12_create_lansia_measurements.sql` untuk membuat tabel pengukuran lansia.
+6. Buka `http://localhost/posyandu-mawar/`
 
 Login admin awal: username `admin`, password `admin123`.
 Alamat alternatif (Auto Virtual Hosts Laragon): `http://posyandu-mawar.test`.
@@ -18,8 +19,9 @@ lalu buka `http://localhost:8000/`.
 ## Struktur
 - `database.sql` : skema database (users, balita, lansia, view v_balita) dan akun admin awal
 - `database/migrations/2026_11_09_create_tumbuh_kembang_tables.sql` : tabel pengukuran dan Vitamin A
+- `database/migrations/2026_11_12_create_lansia_measurements.sql` : tabel riwayat pengukuran lansia
 - `config.php` : koneksi MySQL (default Laragon: root, tanpa password)
-- `api-balita.php`, `api-lansia.php` : memuat dan menyimpan biodata balita dan lansia ke MySQL
+- `api-balita.php`, `api-lansia.php` : memuat dan menyimpan biodata serta pengukuran lansia ke MySQL
 - `routes/tumbuh-kembang.php` : API untuk pengukuran, grafik, Vitamin A, dan catatan kunjungan balita
 - `controllers/`, `models/` : logika data tumbuh kembang balita
 - `login.php`, `logout.php`, `auth.php` : sistem login
@@ -29,4 +31,9 @@ lalu buka `http://localhost:8000/`.
 ## Catatan
 Data balita dan lansia disimpan di MySQL. Data tumbuh kembang balita memerlukan
 migrasi yang tercantum di atas; jika tabel belum tersedia, jalankan migrasi
-sebelum membuka halaman pengukuran.
+sebelum membuka halaman pengukuran. Riwayat berat badan, tinggi badan, lingkar
+perut, dan tekanan darah lansia juga memerlukan migrasi pengukuran lansia di atas.
+Tanggal kunjungan pengukuran ditetapkan sekali dari daftar pengukuran balita atau
+lansia dan digunakan kembali untuk setiap hasil yang disimpan pada kunjungan itu.
+Detail lansia dapat berpindah antara Profil dan Pengukuran melalui tab atau gestur
+geser horizontal.

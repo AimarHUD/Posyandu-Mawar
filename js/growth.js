@@ -1,9 +1,9 @@
 (function () {
   var labels = {
-    berat: { title: 'Berat Badan', unit: 'kg', min: 1, max: 30, icon: '⚖️' },
-    tinggi: { title: 'Panjang/Tinggi Badan', unit: 'cm', min: 40, max: 130, icon: '📏' },
-    lingkar_kepala: { title: 'Lingkar Kepala', unit: 'cm', min: 30, max: 60, icon: '🧢' },
-    lila: { title: 'Lingkar Lengan Atas', unit: 'cm', min: 8, max: 25, icon: '💪' }
+    berat: { title: 'Berat Badan', unit: 'kg', min: 1, max: 30, image: 'assets/images/scale.svg' },
+    tinggi: { title: 'Panjang/Tinggi Badan', unit: 'cm', min: 40, max: 130, image: 'assets/images/stadiometer.svg' },
+    lingkar_kepala: { title: 'Lingkar Kepala', unit: 'cm', min: 30, max: 60, image: 'assets/images/head-circumference.svg' },
+    lila: { title: 'Lingkar Lengan Atas', unit: 'cm', min: 8, max: 25, image: 'assets/images/arm-circumference.svg' }
   };
   var growth = {
     page: '',
@@ -18,7 +18,8 @@
     chartType: 'berat',
     chart: null,
     drafts: {},
-    pending: null
+    pending: null,
+    measurementDate: todayString()
   };
 
   function escapeHtml(value) {
@@ -134,6 +135,7 @@
     growth.data = null;
     growth.notice = '';
     growth.drafts = {};
+    growth.measurementDate = todayString();
     setPage('detail');
     loadData();
   }
@@ -223,23 +225,29 @@
   }
 
   function measurementsHtml() {
+    var child = selectedChild();
+    var dateError = growth.measurementDate < child.lahir || growth.measurementDate > todayString();
     var cards = Object.keys(labels).map(function (kind) {
       var type = labels[kind];
       var last = latestMeasurement(kind);
       var sub = last ? escapeHtml(last.nilai) + ' ' + type.unit + ' · ' + escapeHtml(displayDate(last.tanggal_ukur)) : 'Catat sekarang';
       return '<button type="button" class="measure-card" data-measure="' + kind + '">' +
-        '<span class="measure-icon">' + type.icon + '</span><span class="measure-copy"><b>' + type.title +
+        '<span class="measure-icon"><img src="' + type.image + '" alt="" aria-hidden="true"></span><span class="measure-copy"><b>' + type.title +
         '</b><small>' + sub + '</small></span><span class="measure-arrow" aria-hidden="true">›</span></button>';
     }).join('');
     return '<h3 class="growth-section-title">Catat hasil pengukuran</h3>' +
-      '<p class="growth-hint">Masukkan hasil yang diukur langsung oleh petugas.</p>' + cards;
+      '<p class="growth-hint">Tentukan satu tanggal untuk semua pengukuran yang dicatat pada kunjungan ini.</p>' +
+      '<label class="growth-label" for="measurement-visit-date">Tanggal pengukuran</label>' +
+      '<input class="growth-input" id="measurement-visit-date" type="date" min="' + escapeHtml(child.lahir) +
+      '" max="' + todayString() + '" value="' + escapeHtml(growth.measurementDate) + '">' +
+      (dateError ? '<div class="growth-error" role="alert">Tanggal harus berada di antara tanggal lahir dan hari ini.</div>' : '') +
+      cards;
   }
 
   function measurementFormHtml() {
     var type = labels[growth.kind];
     var last = latestMeasurement(growth.kind);
-    var today = todayString();
-    var correction = correctionFor(growth.method, today);
+    var correction = correctionFor(growth.method, growth.measurementDate);
     var correctionText = correction > 0 ? 'Hasil ukur berdiri dikoreksi otomatis +0,7 cm karena umur saat pengukuran 0–24 bulan.' :
       correction < 0 ? 'Hasil ukur berbaring dikoreksi otomatis −0,7 cm karena umur saat pengukuran di atas 24 bulan.' :
         'Tidak ada koreksi otomatis untuk cara ukur dan umur ini.';
@@ -249,6 +257,8 @@
       '<div class="growth-soft-alert" id="correction-note">' + correctionText + '</div>' : '';
     return '<button type="button" class="growth-back-link" data-measure-back>‹ Kembali ke daftar pengukuran</button>' +
       '<h3 class="growth-section-title">' + type.title + '</h3>' +
+      '<div class="growth-card shared-measure-date"><span>Tanggal pengukuran</span><b>' +
+      escapeHtml(displayDate(growth.measurementDate)) + '</b><small>Tanggal ditetapkan di halaman Pengukuran.</small></div>' +
       '<div class="growth-card last-measure-grid"><div><span>Pengukuran terakhir</span><b>' +
       escapeHtml(last ? displayDate(last.tanggal_ukur) : 'Belum ada') + '</b></div><div><span>Nilai terakhir</span><b>' +
       escapeHtml(last ? last.nilai + ' ' + type.unit : 'Belum ada') + '</b></div></div>' +
@@ -256,8 +266,6 @@
       '<div class="large-number"><input id="measure-value" type="number" inputmode="decimal" min="' + type.min +
       '" max="' + type.max + '" step="0.01" placeholder="0,00" aria-describedby="measure-error"><span>' + type.unit + '</span></div>' +
       '<div class="growth-error inline-error" id="measure-error" aria-live="polite"></div>' +
-      '<label class="growth-label" for="measure-date">Tanggal pengukuran</label>' +
-      '<input class="growth-input" id="measure-date" type="date" max="' + today + '" value="' + today + '">' +
       '<label class="growth-label" for="measure-note">Catatan (opsional)</label>' +
       '<textarea class="growth-input" id="measure-note" rows="3" maxlength="2000" placeholder="Contoh: kondisi saat pengukuran"></textarea>' +
       '<div class="growth-actions"><button type="button" class="growth-button" data-measure-save>Simpan</button>' +
@@ -440,9 +448,8 @@
   function updateCorrectionNote() {
     if (growth.kind !== 'tinggi') return;
     var note = document.getElementById('correction-note');
-    var date = document.getElementById('measure-date');
-    if (!note || !date) return;
-    var correction = correctionFor(growth.method, date.value);
+    if (!note) return;
+    var correction = correctionFor(growth.method, growth.measurementDate);
     note.textContent = correction > 0 ?
       'Hasil ukur berdiri dikoreksi otomatis +0,7 cm karena umur saat pengukuran 0–24 bulan.' :
       correction < 0 ?
@@ -453,8 +460,8 @@
   function showHeightChoice() {
     var sheet = document.getElementById('sheet');
     sheet.innerHTML = '<h2>Pilih cara ukur tinggi badan</h2><p class="growth-hint">Tentukan posisi balita sebelum memasukkan hasil.</p>' +
-      '<div class="height-choice"><button type="button" data-height-method="berbaring"><span>🛏️</span><b>Berbaring</b></button>' +
-      '<button type="button" data-height-method="berdiri"><span>🧍</span><b>Berdiri</b></button></div>' +
+      '<div class="height-choice"><button type="button" data-height-method="berbaring"><img src="assets/images/infantometer.svg" alt="" aria-hidden="true"><b>Berbaring</b></button>' +
+      '<button type="button" data-height-method="berdiri"><img src="assets/images/stadiometer.svg" alt="" aria-hidden="true"><b>Berdiri</b></button></div>' +
       '<button type="button" class="btn ghost" data-modal-close>Batal</button>';
     document.getElementById('modal').classList.add('show');
   }
@@ -525,7 +532,7 @@
   function readMeasurementForm() {
     var type = labels[growth.kind];
     var value = document.getElementById('measure-value').value.trim().replace(',', '.');
-    var date = document.getElementById('measure-date').value;
+    var date = growth.measurementDate;
     var note = document.getElementById('measure-note').value.trim();
     var error = document.getElementById('measure-error');
     var number = Number(value);
@@ -537,8 +544,8 @@
       error.textContent = 'Nilai ' + type.title.toLowerCase() + ' harus antara ' + type.min + '–' + type.max + ' ' + type.unit + '.';
       return;
     }
-    if (!date || date > todayString()) {
-      error.textContent = 'Tanggal pengukuran wajib diisi dan tidak boleh melewati hari ini.';
+    if (!date || date < selectedChild().lahir || date > todayString()) {
+      error.textContent = 'Tanggal pengukuran harus berada di antara tanggal lahir dan hari ini.';
       return;
     }
     if (growth.kind === 'tinggi') {
@@ -581,7 +588,12 @@
     if (!target) return;
 
     if (target.hasAttribute('data-growth-back')) {
-      if (history.state && history.state.growthDetail) {
+      if (growth.page === 'measurement') {
+        growth.page = 'detail';
+        growth.section = 'pengukuran';
+        growth.error = '';
+        renderGrowth();
+      } else if (history.state && history.state.growthDetail) {
         history.back();
       } else {
         history.replaceState(null, '', location.pathname + location.search);
@@ -629,7 +641,6 @@
     }
     if (target.hasAttribute('data-measure-repeat')) {
       document.getElementById('measure-value').value = '';
-      document.getElementById('measure-date').value = todayString();
       document.getElementById('measure-note').value = '';
       document.getElementById('measure-error').textContent = '';
       updateCorrectionNote();
@@ -666,7 +677,6 @@
 
   document.addEventListener('input', function (event) {
     var date = event.target;
-    if (date.id === 'measure-date') updateCorrectionNote();
     if (date.hasAttribute('data-vitamin-date')) {
       var type = date.getAttribute('data-vitamin-date');
       vitaminDraft(type).date = date.value;
@@ -674,7 +684,13 @@
   });
 
   document.addEventListener('change', function (event) {
-    if (event.target.id === 'measure-date') updateCorrectionNote();
+    if (event.target.id === 'measurement-visit-date') {
+      var selectedDate = event.target.value;
+      var dateError = selectedDate < selectedChild().lahir || selectedDate > todayString();
+      event.target.setCustomValidity(dateError ? 'Tanggal harus berada di antara tanggal lahir dan hari ini.' : '');
+      growth.measurementDate = selectedDate;
+      renderGrowth();
+    }
   });
 
   window.addEventListener('popstate', syncDetailRoute);
