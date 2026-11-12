@@ -7,6 +7,17 @@ final class Balita
     $name = trim(is_string($profile['nama'] ?? null) ? $profile['nama'] : '');
     $birthday = is_string($profile['lahir'] ?? null) ? $profile['lahir'] : '';
     $parent = trim(is_string($profile['ortu'] ?? null) ? $profile['ortu'] : '');
+    $address = trim(is_string($profile['alamat'] ?? null) ? $profile['alamat'] : '');
+    $armCircumference = $profile['lingkarLenganLahir'] ?? null;
+    if ($armCircumference === '') {
+      $armCircumference = null;
+    }
+    if (
+      $armCircumference !== null &&
+      (!is_numeric($armCircumference) || (float)$armCircumference < 0 || (float)$armCircumference > 999.99)
+    ) {
+      throw new InvalidArgumentException('Lingkar lengan lahir tidak valid.');
+    }
     $clientId = filter_var($profile['id'] ?? null, FILTER_VALIDATE_INT);
     $growthId = filter_var($profile['growthBalitaId'] ?? null, FILTER_VALIDATE_INT);
 
@@ -19,9 +30,18 @@ final class Balita
       $stmt->execute([$growthId]);
       if ($stmt->fetchColumn()) {
         $stmt = $pdo->prepare(
-          'UPDATE balita SET nama = ?, tanggal_lahir = ?, nama_ortu = ? WHERE id = ?'
+          'UPDATE balita SET nama = ?, tanggal_lahir = ?, nama_ortu = ?,
+           alamat = COALESCE(?, alamat), lingkar_lengan_lahir = COALESCE(?, lingkar_lengan_lahir)
+           WHERE id = ?'
         );
-        $stmt->execute([$name, $birthday, $parent, $growthId]);
+        $stmt->execute([
+          $name,
+          $birthday,
+          $parent,
+          $address !== '' ? $address : null,
+          $armCircumference !== null ? (float)$armCircumference : null,
+          $growthId,
+        ]);
         return $growthId;
       }
     }
@@ -31,9 +51,16 @@ final class Balita
     }
 
     $stmt = $pdo->prepare(
-      'INSERT INTO balita (nama, tanggal_lahir, nama_ortu) VALUES (?, ?, ?)'
+      'INSERT INTO balita (nama, tanggal_lahir, nama_ortu, alamat, lingkar_lengan_lahir)
+       VALUES (?, ?, ?, ?, ?)'
     );
-    $stmt->execute([$name, $birthday, $parent]);
+    $stmt->execute([
+      $name,
+      $birthday,
+      $parent,
+      $address !== '' ? $address : null,
+      $armCircumference !== null ? (float)$armCircumference : null,
+    ]);
     return (int) $pdo->lastInsertId();
   }
 

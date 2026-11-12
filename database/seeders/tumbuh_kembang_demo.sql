@@ -1,11 +1,11 @@
 USE posyandu_mawar;
 
-INSERT INTO balita (nama, tanggal_lahir, nama_ortu)
-SELECT 'Aisyah Putri', DATE_SUB(CURDATE(), INTERVAL 6 MONTH), 'Ibu Rina'
+INSERT INTO balita (nama, tanggal_lahir, nama_ortu, alamat, lingkar_lengan_lahir)
+SELECT 'Aisyah Putri', DATE_SUB(CURDATE(), INTERVAL 6 MONTH), 'Ibu Rina', 'RT 01', 13.50
 WHERE NOT EXISTS (SELECT 1 FROM balita WHERE nama = 'Aisyah Putri');
 
-INSERT INTO balita (nama, tanggal_lahir, nama_ortu)
-SELECT 'Raka Pratama', DATE_SUB(CURDATE(), INTERVAL 24 MONTH), 'Ibu Sari'
+INSERT INTO balita (nama, tanggal_lahir, nama_ortu, alamat, lingkar_lengan_lahir)
+SELECT 'Raka Pratama', DATE_SUB(CURDATE(), INTERVAL 24 MONTH), 'Ibu Sari', 'RT 02', 14.00
 WHERE NOT EXISTS (SELECT 1 FROM balita WHERE nama = 'Raka Pratama');
 
 INSERT INTO pengukuran (balita_id, jenis, nilai, tanggal_ukur, catatan)

@@ -15,6 +15,7 @@ var elderMeasurementPage = false;
 var elderMeasurementKind = '';
 var elderMeasurementDate = iso(new Date());
 var elderSwipeStart = null;
+var elderNotice = '';
 var today = new Date();
 var exportDate = iso(today);
 var apiError = '';
@@ -31,6 +32,7 @@ var elderMeasurementTypes = {
   lingkar_perut: { title: 'Lingkar Perut', unit: 'cm', image: 'assets/images/waist-circumference.svg', min: 20, max: 250, step: '0.1' },
   tekanan_darah: { title: 'Tekanan Darah', unit: 'mmHg', image: 'assets/images/blood-pressure.svg' }
 };
+var monthlyAttendance = { balita: null, lansia: null, monthLabel: '', loading: false, error: '' };
 
 function esc(value) {
   return String(value == null ? '' : value).replace(/[&<>"]/g, function (char) {
@@ -163,6 +165,41 @@ async function requestLansia(payload, method) {
   return result.data;
 }
 
+async function syncMonthlyAttendance() {
+  monthlyAttendance.loading = true;
+  monthlyAttendance.error = '';
+  render();
+  try {
+    var response = await fetch('api-statistik.php', {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+    var result;
+    try {
+      result = await response.json();
+    } catch (error) {
+      throw new Error('Respons statistik tidak dapat dibaca.');
+    }
+    if (!response.ok) throw new Error(result.error || 'Statistik kunjungan gagal dimuat.');
+    if (!result.data || !Number.isInteger(result.data.balita) ||
+      !Number.isInteger(result.data.lansia) || typeof result.data.monthLabel !== 'string') {
+      throw new Error('Data statistik kunjungan tidak valid.');
+    }
+    monthlyAttendance = {
+      balita: result.data.balita,
+      lansia: result.data.lansia,
+      monthLabel: result.data.monthLabel,
+      loading: false,
+      error: ''
+    };
+  } catch (error) {
+    monthlyAttendance.loading = false;
+    monthlyAttendance.error = error.message;
+  }
+  render();
+}
+
 async function requestElderMeasurements(personId, payload) {
   var options = { method: payload ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', headers: {} };
   if (payload) {
@@ -270,12 +307,13 @@ function errorNotice() {
 }
 
 function render() {
+  today = new Date();
   var view = document.getElementById('view');
   var app = document.getElementById('app');
   var fab = document.getElementById('fab');
   var nav = document.getElementById('nav');
   app.classList.toggle('child-form-screen', screen === 'childForm' || screen === 'elderForm');
-  app.classList.toggle('child-detail-screen', screen === 'childDetail' || screen === 'elderDetail');
+  app.classList.toggle('child-detail-screen', screen === 'elderDetail');
   fab.style.display = screen === 'main' && (tab === 'balita' || tab === 'lansia') ? 'grid' : 'none';
   fab.textContent = tab === 'balita' ? '+ Tambah Anak' : '+ Tambah Lansia';
   fab.setAttribute('aria-label', tab === 'balita' ? 'Tambah Anak' : 'Tambah Lansia');
@@ -289,10 +327,6 @@ function render() {
     renderElderForm(view);
     return;
   }
-  if (screen === 'childDetail') {
-    renderChildDetail(view);
-    return;
-  }
   if (screen === 'elderDetail') {
     renderElderDetail(view);
     return;
@@ -301,7 +335,19 @@ function render() {
   var html = errorNotice();
   if (tab === 'home') {
     var notifications = notif();
-    html += '<div class="grid"><div class="stat"><b>' + aktifB().length + '</b><span>Balita aktif (0-59 bln)</span></div><div class="stat"><b>' + aktifL().length + '</b><span>Lansia aktif (59+ th)</span></div><div class="stat"><b>' + lulusB().length + '</b><span>Balita lulus (tersimpan)</span></div><div class="stat"><b>' + riwayatL().length + '</b><span>Lansia riwayat</span></div></div>';
+    var attendanceMonth = monthlyAttendance.monthLabel || 'bulan ini';
+    var balitaAttendance = monthlyAttendance.loading ? '…' :
+      monthlyAttendance.error ? '—' : monthlyAttendance.balita;
+    var lansiaAttendance = monthlyAttendance.loading ? '…' :
+      monthlyAttendance.error ? '—' : monthlyAttendance.lansia;
+    html += '<div class="grid"><div class="stat"><b>' + aktifB().length + '</b><span>Balita aktif (0-59 bln)</span></div>' +
+      '<div class="stat"><b>' + aktifL().length + '</b><span>Lansia aktif (59+ th)</span></div>' +
+      '<div class="stat"><b>' + balitaAttendance + '</b><span>Balita datang (' + esc(attendanceMonth) + ')</span></div>' +
+      '<div class="stat"><b>' + lansiaAttendance + '</b><span>Lansia datang (' + esc(attendanceMonth) + ')</span></div></div>';
+    if (monthlyAttendance.error) {
+      html += '<div class="alert error-notice" role="alert">' + esc(monthlyAttendance.error) +
+        ' <button class="link" data-retry-monthly>Coba lagi</button></div>';
+    }
     html += '<h2>🔔 Notifikasi</h2>';
     html += notifications.length ? notifications.map(function (child) {
       return '<div class="alert"><b>' + esc(child.nama) + '</b> berumur ' + umurTxt(bulan(child.lahir)) + '. Akan keluar dari sistem balita dalam ' + sisa(child) + ' bulan.</div>';
@@ -373,7 +419,10 @@ function renderChildForm(view) {
     '<label for="child-name">Nama Anak</label><input id="child-name" maxlength="100" required value="' + value('nama') + '" placeholder="Nama lengkap anak">' +
     '<label for="child-gender">Jenis Kelamin</label><select id="child-gender" required><option value="">Pilih jenis kelamin</option><option value="Laki-laki" ' + (child && child.gender === 'Laki-laki' ? 'selected' : '') + '>Laki-laki</option><option value="Perempuan" ' + (child && child.gender === 'Perempuan' ? 'selected' : '') + '>Perempuan</option></select>' +
     '<label for="child-birth">Tanggal Lahir</label><input id="child-birth" type="date" max="' + iso(today) + '" required value="' + value('lahir') + '">' +
+    '<label for="child-address">Alamat</label><input id="child-address" value="' + value('alamat') + '" placeholder="Alamat lengkap">' +
     '<label for="child-order">Anak Ke-</label><input id="child-order" type="number" min="1" max="99" value="' + value('anakKe') + '" placeholder="Urutan anak">' +
+    '<label for="child-mother">Nama Ibu</label><input id="child-mother" maxlength="100" value="' + value('namaIbu') + '" placeholder="Nama ibu anak">' +
+    '<label for="child-father">Nama Ayah</label><input id="child-father" maxlength="100" value="' + value('namaAyah') + '" placeholder="Nama ayah anak">' +
     '<label for="child-kk">Nomor KK</label><input id="child-kk" type="text" inputmode="numeric" maxlength="16" value="' + value('nomorKK') + '" placeholder="16 digit nomor KK">' +
     '<label for="child-nik">NIK Anak</label><input id="child-nik" type="text" inputmode="numeric" maxlength="16" value="' + value('nik') + '" placeholder="16 digit NIK">' +
     '<label for="child-imd">Inisiasi Menyusu Dini (IMD)</label><select id="child-imd"><option value="">Pilih status IMD</option><option value="Ya" ' + (child && child.imd === 'Ya' ? 'selected' : '') + '>Ya</option><option value="Tidak" ' + (child && child.imd === 'Tidak' ? 'selected' : '') + '>Tidak</option></select>' +
@@ -381,8 +430,7 @@ function renderChildForm(view) {
     '<label for="child-weight">Berat Badan Lahir (KG)</label><input id="child-weight" type="number" min="0" max="999.99" step="0.01" value="' + value('beratLahir') + '" placeholder="Berat badan lahir (kg)">' +
     '<label for="child-length">Panjang Badan Lahir (CM)</label><input id="child-length" type="number" min="0" max="999.99" step="0.01" value="' + value('panjangLahir') + '" placeholder="Panjang badan lahir (cm)">' +
     '<label for="child-head">Lingkar Kepala Lahir (CM)</label><input id="child-head" type="number" min="0" max="999.99" step="0.01" value="' + value('lingkarKepala') + '" placeholder="Lingkar kepala lahir (cm)">' +
-    '<label for="child-mother">Ibu Anak</label><input id="child-mother" maxlength="100" value="' + value('namaIbu') + '" placeholder="Nama ibu anak">' +
-    '<label for="child-father">Ayah Anak</label><input id="child-father" maxlength="100" value="' + value('namaAyah') + '" placeholder="Nama ayah anak">' +
+    '<label for="child-arm">Lingkar Lengan Lahir (CM)</label><input id="child-arm" type="number" min="0" max="999.99" step="0.01" value="' + value('lingkarLenganLahir') + '" placeholder="Lingkar lengan lahir (cm)">' +
     '<p class="form-error" id="child-error" role="alert"></p><button class="btn child-submit" id="child-save" type="button">' + (child ? 'Simpan Perubahan' : 'Lanjut') + '</button></div></section>';
 }
 
@@ -394,15 +442,17 @@ function renderElderForm(view) {
     '<div class="child-content"><p class="form-intro">Silakan mengisi data-data di bawah ini untuk kelengkapan informasi</p>' +
     '<h2>Biodata Lansia</h2>' +
     '<label for="elder-name">Nama Lengkap</label><input id="elder-name" maxlength="100" required value="' + value('nama') + '" placeholder="Nama lengkap lansia">' +
-    '<label for="elder-gender">Jenis Kelamin</label><select id="elder-gender" required><option value="">Pilih jenis kelamin</option><option value="Laki-laki" ' + (person && person.gender === 'Laki-laki' ? 'selected' : '') + '>Laki-laki</option><option value="Perempuan" ' + (person && person.gender === 'Perempuan' ? 'selected' : '') + '>Perempuan</option></select>' +
+    '<label for="elder-gender">Jenis Kelamin</label><select id="elder-gender"><option value="">Pilih jenis kelamin</option><option value="Laki-laki" ' + (person && person.gender === 'Laki-laki' ? 'selected' : '') + '>Laki-laki</option><option value="Perempuan" ' + (person && person.gender === 'Perempuan' ? 'selected' : '') + '>Perempuan</option></select>' +
     '<label for="elder-birth">Tanggal Lahir</label><input id="elder-birth" type="date" max="' + iso(today) + '" required value="' + value('lahir') + '">' +
     '<label for="elder-kk">Nomor KK</label><input id="elder-kk" type="text" inputmode="numeric" maxlength="16" value="' + value('nomorKK') + '" placeholder="16 digit nomor KK">' +
-    '<label for="elder-nik">NIK</label><input id="elder-nik" type="text" inputmode="numeric" maxlength="16" required value="' + value('nik') + '" placeholder="16 digit NIK">' +
-    '<label for="elder-address">Alamat</label><input id="elder-address" maxlength="150" required value="' + value('alamat') + '" placeholder="Alamat lengkap">' +
-    '<label for="elder-phone">Nomor HP</label><input id="elder-phone" type="tel" maxlength="20" required value="' + value('nomorHp') + '" placeholder="Nomor HP lansia">' +
-    '<label for="elder-guardian">Nama Pendamping</label><input id="elder-guardian" maxlength="100" required value="' + value('namaPendamping') + '" placeholder="Nama pendamping">' +
-    '<label for="elder-guardian-phone">Nomor HP Pendamping</label><input id="elder-guardian-phone" type="tel" maxlength="20" required value="' + value('nomorHpPendamping') + '" placeholder="Nomor HP pendamping">' +
-    '<p class="form-error" id="elder-error" role="alert"></p><button class="btn child-submit" id="elder-save" type="button">' + (person ? 'Simpan Perubahan' : 'Lanjut') + '</button></div></section>';
+    '<label for="elder-nik">NIK</label><input id="elder-nik" type="text" inputmode="numeric" maxlength="16" value="' + value('nik') + '" placeholder="16 digit NIK">' +
+    '<label for="elder-address">Alamat</label><input id="elder-address" maxlength="150" value="' + value('alamat') + '" placeholder="Alamat lengkap">' +
+    '<label for="elder-phone">Nomor HP</label><input id="elder-phone" type="tel" maxlength="20" value="' + value('nomorHp') + '" placeholder="Nomor HP lansia">' +
+    '<label for="elder-guardian">Nama Pendamping</label><input id="elder-guardian" maxlength="100" value="' + value('namaPendamping') + '" placeholder="Nama pendamping">' +
+    '<label for="elder-guardian-phone">Nomor HP Pendamping</label><input id="elder-guardian-phone" type="tel" maxlength="20" value="' + value('nomorHpPendamping') + '" placeholder="Nomor HP pendamping">' +
+    '<p class="form-error" id="elder-error" role="alert"></p><div class="growth-actions">' +
+    '<button class="growth-button secondary" type="button" data-back>Batal</button>' +
+    '<button class="growth-button" id="elder-save" type="button">Simpan</button></div></div></section>';
 }
 
 function displayValue(value, unit) {
@@ -414,33 +464,6 @@ function childParentSummary(child) {
     return 'Ibu: ' + esc(child.namaIbu || '-') + ' · Ayah: ' + esc(child.namaAyah || '-');
   }
   return 'Ortu: ' + esc(child.ortu || '-');
-}
-
-function renderChildDetail(view) {
-  var child = db.balita.find(function (item) { return item.id === selectedChildId; });
-  if (!child) {
-    screen = 'main';
-    render();
-    return;
-  }
-  view.innerHTML = '<section class="child-page detail-page"><button class="back-link" data-back type="button">← Kembali</button>' +
-    '<div class="child-content"><div class="detail-identity"><span class="av">👶</span><div><small>Data Anak</small><h1>' + esc(child.nama) + genderSymbol(child.gender) + '</h1></div></div>' +
-    '<section class="bio-section"><div class="bio-heading"><h2>Biodata Anak</h2><button class="text-action" data-edit-child type="button">Ubah</button></div>' +
-    '<dl class="bio-list">' +
-    '<div><dt>Nama</dt><dd>' + esc(child.nama) + '</dd></div>' +
-    '<div><dt>Jenis Kelamin</dt><dd>' + displayValue(child.gender) + '</dd></div>' +
-    '<div><dt>Tanggal Lahir</dt><dd>' + esc(child.lahir) + '</dd></div>' +
-    '<div><dt>Umur</dt><dd>' + umurTxt(bulan(child.lahir)) + '</dd></div>' +
-    '<div><dt>Anak Ke-</dt><dd>' + displayValue(child.anakKe) + '</dd></div>' +
-    '<div><dt>Nomor KK</dt><dd>' + displayValue(child.nomorKK) + '</dd></div>' +
-    '<div><dt>NIK Anak</dt><dd>' + displayValue(child.nik) + '</dd></div>' +
-    '<div><dt>Inisiasi Menyusu Dini (IMD)</dt><dd>' + displayValue(child.imd) + '</dd></div>' +
-    '<div><dt>Ibu Anak</dt><dd>' + displayValue(child.namaIbu) + '</dd></div>' +
-    '<div><dt>Ayah Anak</dt><dd>' + displayValue(child.namaAyah) + '</dd></div></dl></section>' +
-    '<section class="bio-section"><div class="bio-heading"><h2>Data Timbang</h2><button class="text-action" data-edit-child type="button">Ubah</button></div>' +
-    '<dl class="bio-list"><div><dt>Berat Badan Lahir</dt><dd>' + displayValue(child.beratLahir, ' kg') + '</dd></div>' +
-    '<div><dt>Panjang Badan Lahir</dt><dd>' + displayValue(child.panjangLahir, ' cm') + '</dd></div>' +
-    '<div><dt>Lingkar Kepala Lahir</dt><dd>' + displayValue(child.lingkarKepala, ' cm') + '</dd></div></dl></section></div></section>';
 }
 
 function renderElderDetail(view) {
@@ -457,10 +480,12 @@ function renderElderDetail(view) {
   var records = elderMeasurements.personId === person.id ? elderMeasurements.records : [];
   var sectionHtml = elderSection === 'profil' ? elderProfileHtml(person) :
     elderSection === 'pengukuran' ? elderMeasurementsHtml(person, records) : elderVisitNotesHtml(person);
+  var noticeHtml = elderNotice ? '<div class="growth-success" role="status">' + esc(elderNotice) + '</div>' : '';
+  elderNotice = '';
   view.innerHTML = '<section class="child-page detail-page"><button class="back-link" data-back type="button">← Kembali</button>' +
     '<div class="child-content"><div class="detail-identity"><span class="av">👵</span><div><small>Pemantauan lansia</small><h1>' +
     esc(person.nama) + genderSymbol(person.gender) + '</h1><small>' + tahun(person.lahir) + ' tahun · Lahir ' +
-    esc(displayDate(person.lahir)) + '</small></div></div>' + errorNotice() +
+    esc(displayDate(person.lahir)) + '</small></div></div>' + errorNotice() + noticeHtml +
     '<div class="growth-tabs" role="tablist" aria-label="Detail lansia">' +
     '<button type="button" role="tab" data-elder-tab="profil" aria-selected="' + (elderSection === 'profil') +
     '" class="' + (elderSection === 'profil' ? 'active' : '') + '">Profil</button>' +
@@ -472,7 +497,8 @@ function renderElderDetail(view) {
 }
 
 function elderProfileHtml(person) {
-  return '<section class="bio-section"><div class="bio-heading"><h2>Biodata Lansia</h2></div>' +
+  return '<section class="bio-section"><div class="bio-heading"><h2>Biodata Lansia</h2>' +
+    '<button class="text-action" type="button" data-edit="lansia" data-id="' + esc(person.id) + '">Ubah</button></div>' +
     '<dl class="bio-list">' +
     '<div><dt>Nama Lengkap</dt><dd>' + esc(person.nama) + '</dd></div>' +
     '<div><dt>Jenis Kelamin</dt><dd>' + displayValue(person.gender) + '</dd></div>' +
@@ -558,10 +584,24 @@ function elderVisitNotesHtml(person) {
     state.error ? '<div class="alert error-notice" role="alert">' + esc(state.error) +
       ' <button type="button" class="link" data-elder-notes-retry>Coba lagi</button></div>' :
       state.records.length ? '<div class="visit-timeline">' + state.records.map(function (item) {
+        var lines = (item.measurements || []).map(function (measurement) {
+          var type = elderMeasurementTypes[measurement.jenis];
+          if (!type) return '';
+          var value = measurement.jenis === 'tekanan_darah' ?
+            measurement.sistolik + '/' + measurement.diastolik + ' mmHg' :
+            measurement.nilai + ' ' + type.unit;
+          return type.title + ': ' + value +
+            (measurement.catatan ? ' · Catatan pengukuran: ' + measurement.catatan : '');
+        }).filter(Boolean);
+        (item.catatan || []).forEach(function (note) {
+          lines.push('Catatan kunjungan: ' + note);
+        });
         return '<article class="visit-entry"><span class="visit-dot"></span><time>' +
-          esc(displayDate(item.tanggal_kunjungan)) + '</time><p>' + esc(item.catatan) + '</p></article>';
+          esc(displayDate(item.tanggal_kunjungan)) + '</time><p>' +
+          esc(lines.join(' · ') || 'Kunjungan tercatat') + '</p></article>';
       }).join('') + '</div>' :
-        '<div class="growth-empty"><span aria-hidden="true">🌸</span><b>Belum ada catatan kunjungan</b></div>';
+        '<div class="growth-empty"><span aria-hidden="true">🌸</span><b>Belum ada riwayat kunjungan</b>' +
+        '<p>Pengukuran dan catatan kunjungan yang tersimpan akan tampil di sini.</p></div>';
   return '<section class="elder-measure-section"><h2>Catatan Kunjungan</h2>' +
     '<label class="growth-label" for="elder-visit-note-date">Tanggal kunjungan</label>' +
     '<input class="growth-input" id="elder-visit-note-date" type="date" min="' + esc(person.lahir) +
@@ -711,7 +751,7 @@ async function saveElderMeasurement(kind, button) {
 }
 
 function openChildForm(editing) {
-  formReturn = editing ? 'childDetail' : 'main';
+  formReturn = 'main';
   returnToGrowthDetail = Boolean(editing && /^#balita-\d+$/.test(location.hash));
   if (!editing) selectedChildId = null;
   if (returnToGrowthDetail && window.exitGrowthForEdit) window.exitGrowthForEdit();
@@ -725,6 +765,7 @@ async function saveChild() {
   var errorElement = document.getElementById('child-error');
   var name = document.getElementById('child-name').value.trim();
   var birth = document.getElementById('child-birth').value;
+  var address = document.getElementById('child-address').value.trim();
   var gender = document.getElementById('child-gender').value;
   var orderValue = document.getElementById('child-order').value;
   var householdNumber = document.getElementById('child-kk').value.trim();
@@ -733,6 +774,7 @@ async function saveChild() {
   var weight = document.getElementById('child-weight').value;
   var length = document.getElementById('child-length').value;
   var head = document.getElementById('child-head').value;
+  var arm = document.getElementById('child-arm').value;
 
   if (!name || !birth || !gender) {
     errorElement.textContent = 'Nama, jenis kelamin, dan tanggal lahir wajib diisi.';
@@ -758,7 +800,11 @@ async function saveChild() {
     errorElement.textContent = 'Nomor KK harus terdiri dari 16 angka.';
     return;
   }
-  var values = [weight, length, head];
+  if (address.length > 16000) {
+    errorElement.textContent = 'Alamat terlalu panjang.';
+    return;
+  }
+  var values = [weight, length, head, arm];
   if (values.some(function (value) { return value !== '' && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 999.99); })) {
     errorElement.textContent = 'Ukuran saat lahir harus berupa angka yang valid.';
     return;
@@ -767,6 +813,7 @@ async function saveChild() {
   var payload = {
     nama: name,
     lahir: birth,
+    alamat: address,
     gender: gender,
     anakKe: orderValue || null,
     nomorKK: householdNumber,
@@ -776,9 +823,11 @@ async function saveChild() {
     imd: imd || null,
     beratLahir: weight,
     panjangLahir: length,
-    lingkarKepala: head
+    lingkarKepala: head,
+    lingkarLenganLahir: arm
   };
-  if (formReturn === 'childDetail') payload.id = selectedChildId;
+  var isEditing = Boolean(selectedChildId);
+  if (isEditing) payload.id = selectedChildId;
 
   var button = document.getElementById('child-save');
   button.disabled = true;
@@ -792,11 +841,14 @@ async function saveChild() {
     save();
     if (returnToGrowthDetail) {
       returnToGrowthDetail = false;
-      location.hash = 'balita-' + saved.id;
+      window.openBalitaDetail(saved.id, 'Biodata balita berhasil diperbarui.', true);
       return;
     }
-    screen = 'childDetail';
-    render();
+    window.openBalitaDetail(
+      saved.id,
+      isEditing ? 'Biodata balita berhasil diperbarui.' : 'Data balita berhasil disimpan.',
+      false
+    );
     window.scrollTo(0, 0);
   } catch (error) {
     errorElement.textContent = error.message;
@@ -827,11 +879,11 @@ async function saveElder() {
   var phone = document.getElementById('elder-phone').value.trim();
   var guardian = document.getElementById('elder-guardian').value.trim();
   var guardianPhone = document.getElementById('elder-guardian-phone').value.trim();
-  if (!name || !birth || !gender || !nik || !address || !phone || !guardian || !guardianPhone) {
-    errorElement.textContent = 'Lengkapi nama, NIK, tanggal lahir, alamat, dan kontak lansia serta pendamping.';
+  if (!name || !birth) {
+    errorElement.textContent = 'Nama lengkap dan tanggal lahir wajib diisi.';
     return;
   }
-  if (!/^\d{16}$/.test(nik)) {
+  if (nik && !/^\d{16}$/.test(nik)) {
     errorElement.textContent = 'NIK harus terdiri dari 16 angka.';
     return;
   }
@@ -839,7 +891,8 @@ async function saveElder() {
     errorElement.textContent = 'Nomor KK harus terdiri dari 16 angka.';
     return;
   }
-  if (new Date(birth + 'T00:00:00') > new Date(iso(today) + 'T00:00:00')) {
+  var birthDate = new Date(birth + 'T00:00:00');
+  if (isNaN(birthDate.getTime()) || birthDate > new Date(iso(today) + 'T00:00:00')) {
     errorElement.textContent = 'Tanggal lahir tidak valid.';
     return;
   }
@@ -862,13 +915,18 @@ async function saveElder() {
       namaPendamping: guardian,
       nomorHpPendamping: guardianPhone
     };
-    if (selectedElderFormId) payload.id = selectedElderFormId;
-    var saved = await requestLansia(payload);
+    var isEditing = Boolean(selectedElderFormId);
+    if (isEditing) payload.id = selectedElderFormId;
+    var saved = await requestLansia(payload, isEditing ? 'PATCH' : null);
     var existingIndex = db.lansia.findIndex(function (item) { return item.id === saved.id; });
     if (existingIndex < 0) db.lansia.push(saved);
     else db.lansia[existingIndex] = saved;
     selectedElderId = saved.id;
     save();
+    if (isEditing) {
+      elderSection = 'profil';
+      elderNotice = 'Biodata lansia berhasil diperbarui.';
+    }
     screen = elderFormReturn;
     render();
     window.scrollTo(0, 0);
@@ -984,11 +1042,21 @@ async function exportMeetingData(kind, button) {
 
 document.addEventListener('click', function (event) {
   var target = event.target.closest('[data-t]');
-  if (target) { screen = 'main'; tab = target.dataset.t; render(); return; }
+  if (target) {
+    screen = 'main';
+    tab = target.dataset.t;
+    render();
+    if (tab === 'home') syncMonthlyAttendance();
+    return;
+  }
   target = event.target.closest('[data-r]');
   if (target) { rsub = target.dataset.r; render(); return; }
   target = event.target.closest('[data-child-id]');
-  if (target) { selectedChildId = Number(target.dataset.childId); formReturn = 'main'; screen = 'childDetail'; render(); window.scrollTo(0, 0); return; }
+  if (target) {
+    window.openBalitaDetail(Number(target.dataset.childId), '', false);
+    window.scrollTo(0, 0);
+    return;
+  }
   target = event.target.closest('[data-elder-id]');
   if (target) {
     selectedElderId = Number(target.dataset.elderId);
@@ -1050,17 +1118,20 @@ document.addEventListener('click', function (event) {
   if (event.target.closest('[data-edit-child]')) { openChildForm(true); return; }
   if (event.target.closest('[data-back]')) {
     var restoreGrowthDetail = screen === 'childForm' && returnToGrowthDetail;
+    if (restoreGrowthDetail) {
+      returnToGrowthDetail = false;
+      window.openBalitaDetail(selectedChildId, '', true);
+      window.scrollTo(0, 0);
+      return;
+    }
     screen = screen === 'childForm' ? formReturn :
       screen === 'elderForm' ? elderFormReturn : 'main';
     render();
-    if (restoreGrowthDetail) {
-      returnToGrowthDetail = false;
-      location.hash = 'balita-' + selectedChildId;
-    }
     window.scrollTo(0, 0);
     return;
   }
   if (event.target.closest('[data-retry]')) { syncBalita(); syncLansia(); return; }
+  if (event.target.closest('[data-retry-monthly]')) { syncMonthlyAttendance(); return; }
   if (event.target.id === 'child-save') { saveChild(); return; }
   if (event.target.id === 'elder-save') { saveElder(); return; }
   target = event.target.closest('[data-edit]');
@@ -1180,3 +1251,4 @@ save();
 render();
 syncBalita();
 syncLansia();
+syncMonthlyAttendance();

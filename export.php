@@ -48,6 +48,7 @@ try {
       ['berat_lahir', 'Berat Badan Lahir (kg)', true],
       ['panjang_lahir', 'Panjang Badan Lahir (cm)', true],
       ['lingkar_kepala_lahir', 'Lingkar Kepala Lahir (cm)', true],
+      ['lingkar_lengan_lahir', 'Lingkar Lengan Lahir (CM)', true],
       ['tanggal_ukur', 'Tanggal Pengukuran', false],
       ['berat', 'Berat Badan (kg)', true],
       ['tinggi', 'Panjang/Tinggi Badan (cm)', true],
@@ -63,7 +64,8 @@ try {
       'SELECT b.nama, b.jenis_kelamin, b.tanggal_lahir,
               TIMESTAMPDIFF(MONTH, b.tanggal_lahir, p.tanggal_ukur) AS umur_bulan,
               b.anak_ke, b.nomor_kk, b.nik, b.nama_ibu, b.nama_ayah, b.imd,
-              b.berat_lahir, b.panjang_lahir, b.lingkar_kepala_lahir, p.tanggal_ukur,
+              b.berat_lahir, b.panjang_lahir, b.lingkar_kepala_lahir, b.lingkar_lengan_lahir,
+              p.tanggal_ukur,
               MAX(CASE WHEN p.jenis = \'berat\' THEN p.nilai END) AS berat,
               MAX(CASE WHEN p.jenis = \'tinggi\' THEN p.nilai END) AS tinggi,
               MAX(CASE WHEN p.jenis = \'tinggi\' THEN p.cara_ukur END) AS cara_ukur_tinggi,
@@ -85,7 +87,7 @@ try {
          )
        GROUP BY b.id, b.nama, b.jenis_kelamin, b.tanggal_lahir, b.anak_ke, b.nomor_kk,
                 b.nik, b.nama_ibu, b.nama_ayah, b.imd, b.berat_lahir, b.panjang_lahir,
-                b.lingkar_kepala_lahir, p.tanggal_ukur
+                b.lingkar_kepala_lahir, b.lingkar_lengan_lahir, p.tanggal_ukur
        ORDER BY b.nama ASC, b.id ASC, p.tanggal_ukur ASC'
     );
     $sheetName = 'Balita';
