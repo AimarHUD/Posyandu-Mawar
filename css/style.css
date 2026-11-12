@@ -1231,6 +1231,31 @@ textarea.growth-input {
   min-width: 180px;
 }
 
+.export-card {
+  margin: 20px 0;
+}
+
+.export-card > h2 {
+  margin: 0 0 8px;
+}
+
+.export-card .growth-actions {
+  margin-bottom: 4px;
+}
+
+.export-card .growth-button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.export-status {
+  min-height: 18px;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .growth-error.inline-error {
   min-height: 17px;
   margin: 6px 0;

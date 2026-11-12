@@ -32,7 +32,6 @@ if (empty($_SESSION['growth_csrf'])) {
 </div>
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
 <script src="js/app.js?v=<?= filemtime(__DIR__ . '/js/app.js') ?>"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="js/growth.js?v=<?= filemtime(__DIR__ . '/js/growth.js') ?>"></script>
 </body>
 </html>

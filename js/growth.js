@@ -15,8 +15,6 @@
     loading: false,
     error: '',
     notice: '',
-    chartType: 'berat',
-    chart: null,
     drafts: {},
     pending: null,
     measurementDate: todayString()
@@ -117,10 +115,6 @@
 
   function setPage(page) {
     growth.page = page;
-    if (growth.chart) {
-      growth.chart.destroy();
-      growth.chart = null;
-    }
     renderGrowth();
   }
 
@@ -143,10 +137,6 @@
   function showListFromRoute() {
     growth.page = '';
     growth.child = null;
-    if (growth.chart) {
-      growth.chart.destroy();
-      growth.chart = null;
-    }
     render();
   }
 
@@ -170,7 +160,7 @@
 
   function tabsHtml() {
     var tabs = [
-      ['profil', 'Profil'], ['pengukuran', 'Pengukuran'], ['grafik', 'Grafik'],
+      ['profil', 'Profil'], ['pengukuran', 'Pengukuran'],
       ['vitamin', 'Vitamin A'], ['catatan', 'Catatan Kunjungan']
     ];
     return '<div class="growth-tabs" role="tablist" aria-label="Detail balita">' +
@@ -204,9 +194,11 @@
       '<div><dt>Tanggal Lahir</dt><dd>' + escapeHtml(displayDate(child.lahir)) + '</dd></div>' +
       '<div><dt>Umur</dt><dd>' + escapeHtml(umurTxt(bulan(child.lahir))) + '</dd></div>' +
       '<div><dt>Anak Ke-</dt><dd>' + displayValue(child.anakKe) + '</dd></div>' +
+      '<div><dt>Nomor KK</dt><dd>' + displayValue(child.nomorKK) + '</dd></div>' +
       '<div><dt>NIK Anak</dt><dd>' + displayValue(child.nik) + '</dd></div>' +
       '<div><dt>Inisiasi Menyusu Dini (IMD)</dt><dd>' + displayValue(child.imd) + '</dd></div>' +
-      '<div><dt>Nama Orang Tua/Wali</dt><dd>' + displayValue(child.ortu) + '</dd></div></dl></section>' +
+      '<div><dt>Ibu Anak</dt><dd>' + displayValue(child.namaIbu) + '</dd></div>' +
+      '<div><dt>Ayah Anak</dt><dd>' + displayValue(child.namaAyah) + '</dd></div></dl></section>' +
       '<section class="bio-section"><div class="bio-heading"><h2>Data Timbang</h2><button class="text-action" data-edit-child type="button">Ubah</button></div>' +
       '<dl class="bio-list"><div><dt>Berat Badan Lahir</dt><dd>' + displayValue(child.beratLahir, ' kg') + '</dd></div>' +
       '<div><dt>Panjang Badan Lahir</dt><dd>' + displayValue(child.panjangLahir, ' cm') + '</dd></div>' +
@@ -270,73 +262,6 @@
       '<textarea class="growth-input" id="measure-note" rows="3" maxlength="2000" placeholder="Contoh: kondisi saat pengukuran"></textarea>' +
       '<div class="growth-actions"><button type="button" class="growth-button" data-measure-save>Simpan</button>' +
       '<button type="button" class="growth-button secondary" data-measure-repeat>Ulangi</button></div>';
-  }
-
-  function graphHtml() {
-    var choices = [
-      ['berat', 'Berat badan'], ['tinggi', 'Panjang/Tinggi'], ['lingkar_kepala', 'Lingkar kepala']
-    ];
-    var points = measurements().filter(function (item) { return item.jenis === growth.chartType; });
-    var pills = choices.map(function (choice) {
-      return '<button type="button" data-chart-type="' + choice[0] + '" class="' +
-        (growth.chartType === choice[0] ? 'active' : '') + '">' + choice[1] + '</button>';
-    }).join('');
-    if (points.length < 2) {
-      return '<div class="growth-chart-pills">' + pills + '</div><div class="growth-empty">' +
-        '<span aria-hidden="true">🌱</span><b>Grafik akan tumbuh bersama catatan</b>' +
-        '<p>Tambahkan minimal dua pengukuran untuk melihat perkembangan dari bulan ke bulan.</p>' +
-        '<button type="button" class="growth-button" data-growth-tab="pengukuran">Tambah pengukuran</button></div>';
-    }
-    if (typeof Chart === 'undefined') {
-      return '<div class="growth-chart-pills">' + pills + '</div>' +
-        '<div class="growth-error" role="alert">Grafik belum dapat dimuat. Periksa koneksi internet lalu coba lagi.</div>';
-    }
-    return '<div class="growth-chart-pills">' + pills + '</div><div class="growth-card chart-card">' +
-      '<canvas id="growth-chart" aria-label="Grafik pertumbuhan balita" role="img"></canvas></div>';
-  }
-
-  function chartAge(date) {
-    return ageAt(date);
-  }
-
-  function createChart() {
-    var canvas = document.getElementById('growth-chart');
-    if (!canvas || typeof Chart === 'undefined') return;
-    var type = growth.chartType;
-    var points = measurements().filter(function (item) { return item.jenis === type; });
-    if (points.length < 2) return;
-    var context = canvas.getContext('2d');
-    var gradient = context.createLinearGradient(0, 0, 0, 260);
-    gradient.addColorStop(0, 'rgba(225, 29, 99, .28)');
-    gradient.addColorStop(1, 'rgba(225, 29, 99, .015)');
-    growth.chart = new Chart(context, {
-      type: 'line',
-      data: {
-        labels: points.map(function (item) { return chartAge(item.tanggal_ukur) + ' bln'; }),
-        datasets: [{
-          label: labels[type].title + ' (' + labels[type].unit + ')',
-          data: points.map(function (item) { return Number(item.nilai); }),
-          borderColor: '#E11D63',
-          backgroundColor: gradient,
-          pointBackgroundColor: '#F43F7A',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 5,
-          borderWidth: 3,
-          fill: true,
-          tension: .35
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { display: false }, ticks: { color: '#8A6672' } },
-          y: { beginAtZero: false, grid: { color: '#FFE4EC' }, ticks: { color: '#8A6672' } }
-        }
-      }
-    });
   }
 
   function eligible(type) {
@@ -424,10 +349,6 @@
 
   function renderGrowth() {
     if (!growth.child || growth.page !== 'detail' && growth.page !== 'measurement') return;
-    if (growth.chart) {
-      growth.chart.destroy();
-      growth.chart = null;
-    }
     var view = document.getElementById('view');
     document.getElementById('fab').style.display = 'none';
     if (growth.page === 'measurement') {
@@ -438,11 +359,9 @@
     var content = '';
     if (growth.section === 'profil') content = profileHtml();
     if (growth.section === 'pengukuran') content = measurementsHtml();
-    if (growth.section === 'grafik') content = graphHtml();
     if (growth.section === 'vitamin') content = vitaminsHtml();
     if (growth.section === 'catatan') content = visitsHtml();
     view.innerHTML = headerHtml() + tabsHtml() + statusHtml() + '<div class="growth-content">' + content + '</div>';
-    if (growth.section === 'grafik') createChart();
   }
 
   function updateCorrectionNote() {
@@ -568,8 +487,6 @@
   document.addEventListener('click', function (event) {
     var navButton = event.target.closest('[data-t]');
     if (!navButton) return;
-    if (growth.chart) growth.chart.destroy();
-    growth.chart = null;
     growth.page = '';
     growth.child = null;
     if (location.hash) history.replaceState(null, '', location.pathname + location.search);
@@ -654,11 +571,6 @@
       closeM();
       return;
     }
-    if (target.hasAttribute('data-chart-type')) {
-      growth.chartType = target.getAttribute('data-chart-type');
-      renderGrowth();
-      return;
-    }
     if (target.hasAttribute('data-vitamin-status')) {
       var vitaminType = target.getAttribute('data-vitamin-status');
       growth.drafts[vitaminType] = growth.drafts[vitaminType] || vitaminDraft(vitaminType);
@@ -700,8 +612,6 @@
     showListFromRoute();
   });
   window.exitGrowthForEdit = function () {
-    if (growth.chart) growth.chart.destroy();
-    growth.chart = null;
     growth.page = '';
     growth.child = null;
     history.replaceState(null, '', location.pathname + location.search);
