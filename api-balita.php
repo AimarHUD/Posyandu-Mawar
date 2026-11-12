@@ -18,7 +18,10 @@ try {
   $columns = [
     'jenis_kelamin' => 'VARCHAR(10) NULL',
     'anak_ke' => 'SMALLINT UNSIGNED NULL',
+    'nomor_kk' => 'VARCHAR(16) NULL',
     'nik' => 'VARCHAR(16) NULL',
+    'nama_ibu' => 'VARCHAR(100) NULL',
+    'nama_ayah' => 'VARCHAR(100) NULL',
     'imd' => 'VARCHAR(10) NULL',
     'berat_lahir' => 'DECIMAL(5,2) NULL',
     'panjang_lahir' => 'DECIMAL(5,2) NULL',
@@ -34,7 +37,8 @@ try {
 
   if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $rows = $pdo->query(
-      'SELECT id, nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nik, imd,
+      'SELECT id, nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nomor_kk, nik,
+              nama_ibu, nama_ayah, imd,
               berat_lahir, panjang_lahir, lingkar_kepala_lahir, lulus_manual
        FROM balita ORDER BY id DESC'
     )->fetchAll();
@@ -69,7 +73,8 @@ try {
       respond(404, ['error' => 'Data balita tidak ditemukan.']);
     }
     $stmt = $pdo->prepare(
-      'SELECT id, nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nik, imd,
+      'SELECT id, nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nomor_kk, nik,
+              nama_ibu, nama_ayah, imd,
               berat_lahir, panjang_lahir, lingkar_kepala_lahir, lulus_manual
        FROM balita WHERE id = ?'
     );
@@ -81,7 +86,12 @@ try {
   $birthDate = (string)($input['lahir'] ?? '');
   $gender = $input['gender'] ?? null;
   $childOrder = $input['anakKe'] ?? null;
+  $householdNumber = trim((string)($input['nomorKK'] ?? ''));
   $nik = trim((string)($input['nik'] ?? ''));
+  $motherName = trim((string)($input['namaIbu'] ?? ''));
+  $fatherName = trim((string)($input['namaAyah'] ?? ''));
+  $hasLegacyParent = array_key_exists('ortu', $input);
+  $legacyParent = trim((string)($input['ortu'] ?? ''));
   $imd = $input['imd'] ?? null;
 
   $date = DateTimeImmutable::createFromFormat('!Y-m-d', $birthDate);
@@ -102,6 +112,15 @@ try {
   if ($nik !== '' && !preg_match('/^\d{16}$/', $nik)) {
     respond(422, ['error' => 'NIK harus terdiri dari 16 angka.']);
   }
+  if ($householdNumber !== '' && !preg_match('/^\d{16}$/', $householdNumber)) {
+    respond(422, ['error' => 'Nomor KK harus terdiri dari 16 angka.']);
+  }
+  if (mb_strlen($motherName, 'UTF-8') > 100 || mb_strlen($fatherName, 'UTF-8') > 100) {
+    respond(422, ['error' => 'Nama ibu dan ayah maksimal 100 karakter.']);
+  }
+  if (mb_strlen($legacyParent, 'UTF-8') > 100) {
+    respond(422, ['error' => 'Nama orang tua/wali lama maksimal 100 karakter.']);
+  }
   if ($imd !== null && !in_array($imd, ['Ya', 'Tidak'], true)) {
     respond(422, ['error' => 'Pilihan IMD tidak valid.']);
   }
@@ -119,18 +138,15 @@ try {
     $measurements[] = (float)$value;
   }
 
-  $parentName = trim((string)($input['ortu'] ?? ''));
-  if (mb_strlen($parentName, 'UTF-8') > 100) {
-    respond(422, ['error' => 'Nama orang tua maksimal 100 karakter.']);
-  }
-
   $values = [
     $name,
     $birthDate,
-    $parentName !== '' ? $parentName : null,
     $gender,
     $childOrder !== null && $childOrder !== '' ? (int)$childOrder : null,
+    $householdNumber !== '' ? $householdNumber : null,
     $nik !== '' ? $nik : null,
+    $motherName !== '' ? $motherName : null,
+    $fatherName !== '' ? $fatherName : null,
     $imd,
     $measurements[0],
     $measurements[1],
@@ -145,12 +161,16 @@ try {
   }
 
   if ($id) {
+    $legacyParentUpdate = $hasLegacyParent ? ', nama_ortu = ?' : '';
     $stmt = $pdo->prepare(
-      'UPDATE balita SET nama = ?, tanggal_lahir = ?, nama_ortu = ?, jenis_kelamin = ?,
-       anak_ke = ?, nik = ?, imd = ?, berat_lahir = ?, panjang_lahir = ?,
-       lingkar_kepala_lahir = ? WHERE id = ?'
+      'UPDATE balita SET nama = ?, tanggal_lahir = ?, jenis_kelamin = ?,
+       anak_ke = ?, nomor_kk = ?, nik = ?, nama_ibu = ?, nama_ayah = ?, imd = ?, berat_lahir = ?, panjang_lahir = ?,
+       lingkar_kepala_lahir = ?' . $legacyParentUpdate . ' WHERE id = ?'
     );
-    $stmt->execute(array_merge($values, [$id]));
+    $stmt->execute(array_merge(
+      $values,
+      $hasLegacyParent ? [$legacyParent !== '' ? $legacyParent : null, $id] : [$id]
+    ));
     $exists = $pdo->prepare('SELECT id FROM balita WHERE id = ?');
     $exists->execute([$id]);
     if (!$exists->fetchColumn()) {
@@ -159,17 +179,20 @@ try {
   } else {
     $stmt = $pdo->prepare(
       'INSERT INTO balita
-       (nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nik, imd,
-        berat_lahir, panjang_lahir, lingkar_kepala_lahir)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+       (nama, tanggal_lahir, jenis_kelamin, anak_ke, nomor_kk, nik, nama_ibu, nama_ayah, imd,
+        berat_lahir, panjang_lahir, lingkar_kepala_lahir, nama_ortu)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    $stmt->execute($values);
+    $stmt->execute(array_merge($values, [
+      $hasLegacyParent && $legacyParent !== '' ? $legacyParent : null,
+    ]));
     $id = (int)$pdo->lastInsertId();
   }
 
   $stmt = $pdo->prepare(
-    'SELECT id, nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nik, imd,
-            berat_lahir, panjang_lahir, lingkar_kepala_lahir
+    'SELECT id, nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nomor_kk, nik,
+            nama_ibu, nama_ayah, imd,
+            berat_lahir, panjang_lahir, lingkar_kepala_lahir, lulus_manual
      FROM balita WHERE id = ?'
   );
   $stmt->execute([$id]);
@@ -186,9 +209,12 @@ function formatBalita(array $row): array
     'nama' => $row['nama'],
     'lahir' => $row['tanggal_lahir'],
     'ortu' => $row['nama_ortu'],
+    'nomorKK' => $row['nomor_kk'],
     'gender' => $row['jenis_kelamin'],
     'anakKe' => $row['anak_ke'] !== null ? (int)$row['anak_ke'] : null,
     'nik' => $row['nik'],
+    'namaIbu' => $row['nama_ibu'],
+    'namaAyah' => $row['nama_ayah'],
     'imd' => $row['imd'],
     'beratLahir' => $row['berat_lahir'],
     'panjangLahir' => $row['panjang_lahir'],

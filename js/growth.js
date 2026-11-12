@@ -1,9 +1,9 @@
 (function () {
   var labels = {
-    berat: { title: 'Berat Badan', unit: 'kg', min: 1, max: 30, icon: '⚖️' },
-    tinggi: { title: 'Panjang/Tinggi Badan', unit: 'cm', min: 40, max: 130, icon: '📏' },
-    lingkar_kepala: { title: 'Lingkar Kepala', unit: 'cm', min: 30, max: 60, icon: '🧢' },
-    lila: { title: 'Lingkar Lengan Atas', unit: 'cm', min: 8, max: 25, icon: '💪' }
+    berat: { title: 'Berat Badan', unit: 'kg', min: 1, max: 30, image: 'assets/images/scale.svg' },
+    tinggi: { title: 'Panjang/Tinggi Badan', unit: 'cm', min: 40, max: 130, image: 'assets/images/stadiometer.svg' },
+    lingkar_kepala: { title: 'Lingkar Kepala', unit: 'cm', min: 30, max: 60, image: 'assets/images/head-circumference.svg' },
+    lila: { title: 'Lingkar Lengan Atas', unit: 'cm', min: 8, max: 25, image: 'assets/images/arm-circumference.svg' }
   };
   var growth = {
     page: '',
@@ -15,10 +15,9 @@
     loading: false,
     error: '',
     notice: '',
-    chartType: 'berat',
-    chart: null,
     drafts: {},
-    pending: null
+    pending: null,
+    measurementDate: todayString()
   };
 
   function escapeHtml(value) {
@@ -116,10 +115,6 @@
 
   function setPage(page) {
     growth.page = page;
-    if (growth.chart) {
-      growth.chart.destroy();
-      growth.chart = null;
-    }
     renderGrowth();
   }
 
@@ -134,6 +129,7 @@
     growth.data = null;
     growth.notice = '';
     growth.drafts = {};
+    growth.measurementDate = todayString();
     setPage('detail');
     loadData();
   }
@@ -141,10 +137,6 @@
   function showListFromRoute() {
     growth.page = '';
     growth.child = null;
-    if (growth.chart) {
-      growth.chart.destroy();
-      growth.chart = null;
-    }
     render();
   }
 
@@ -168,7 +160,7 @@
 
   function tabsHtml() {
     var tabs = [
-      ['profil', 'Profil'], ['pengukuran', 'Pengukuran'], ['grafik', 'Grafik'],
+      ['profil', 'Profil'], ['pengukuran', 'Pengukuran'],
       ['vitamin', 'Vitamin A'], ['catatan', 'Catatan Kunjungan']
     ];
     return '<div class="growth-tabs" role="tablist" aria-label="Detail balita">' +
@@ -202,9 +194,11 @@
       '<div><dt>Tanggal Lahir</dt><dd>' + escapeHtml(displayDate(child.lahir)) + '</dd></div>' +
       '<div><dt>Umur</dt><dd>' + escapeHtml(umurTxt(bulan(child.lahir))) + '</dd></div>' +
       '<div><dt>Anak Ke-</dt><dd>' + displayValue(child.anakKe) + '</dd></div>' +
+      '<div><dt>Nomor KK</dt><dd>' + displayValue(child.nomorKK) + '</dd></div>' +
       '<div><dt>NIK Anak</dt><dd>' + displayValue(child.nik) + '</dd></div>' +
       '<div><dt>Inisiasi Menyusu Dini (IMD)</dt><dd>' + displayValue(child.imd) + '</dd></div>' +
-      '<div><dt>Nama Orang Tua/Wali</dt><dd>' + displayValue(child.ortu) + '</dd></div></dl></section>' +
+      '<div><dt>Ibu Anak</dt><dd>' + displayValue(child.namaIbu) + '</dd></div>' +
+      '<div><dt>Ayah Anak</dt><dd>' + displayValue(child.namaAyah) + '</dd></div></dl></section>' +
       '<section class="bio-section"><div class="bio-heading"><h2>Data Timbang</h2><button class="text-action" data-edit-child type="button">Ubah</button></div>' +
       '<dl class="bio-list"><div><dt>Berat Badan Lahir</dt><dd>' + displayValue(child.beratLahir, ' kg') + '</dd></div>' +
       '<div><dt>Panjang Badan Lahir</dt><dd>' + displayValue(child.panjangLahir, ' cm') + '</dd></div>' +
@@ -223,23 +217,29 @@
   }
 
   function measurementsHtml() {
+    var child = selectedChild();
+    var dateError = growth.measurementDate < child.lahir || growth.measurementDate > todayString();
     var cards = Object.keys(labels).map(function (kind) {
       var type = labels[kind];
       var last = latestMeasurement(kind);
       var sub = last ? escapeHtml(last.nilai) + ' ' + type.unit + ' · ' + escapeHtml(displayDate(last.tanggal_ukur)) : 'Catat sekarang';
       return '<button type="button" class="measure-card" data-measure="' + kind + '">' +
-        '<span class="measure-icon">' + type.icon + '</span><span class="measure-copy"><b>' + type.title +
+        '<span class="measure-icon"><img src="' + type.image + '" alt="" aria-hidden="true"></span><span class="measure-copy"><b>' + type.title +
         '</b><small>' + sub + '</small></span><span class="measure-arrow" aria-hidden="true">›</span></button>';
     }).join('');
     return '<h3 class="growth-section-title">Catat hasil pengukuran</h3>' +
-      '<p class="growth-hint">Masukkan hasil yang diukur langsung oleh petugas.</p>' + cards;
+      '<p class="growth-hint">Tentukan satu tanggal untuk semua pengukuran yang dicatat pada kunjungan ini.</p>' +
+      '<label class="growth-label" for="measurement-visit-date">Tanggal pengukuran</label>' +
+      '<input class="growth-input" id="measurement-visit-date" type="date" min="' + escapeHtml(child.lahir) +
+      '" max="' + todayString() + '" value="' + escapeHtml(growth.measurementDate) + '">' +
+      (dateError ? '<div class="growth-error" role="alert">Tanggal harus berada di antara tanggal lahir dan hari ini.</div>' : '') +
+      cards;
   }
 
   function measurementFormHtml() {
     var type = labels[growth.kind];
     var last = latestMeasurement(growth.kind);
-    var today = todayString();
-    var correction = correctionFor(growth.method, today);
+    var correction = correctionFor(growth.method, growth.measurementDate);
     var correctionText = correction > 0 ? 'Hasil ukur berdiri dikoreksi otomatis +0,7 cm karena umur saat pengukuran 0–24 bulan.' :
       correction < 0 ? 'Hasil ukur berbaring dikoreksi otomatis −0,7 cm karena umur saat pengukuran di atas 24 bulan.' :
         'Tidak ada koreksi otomatis untuk cara ukur dan umur ini.';
@@ -249,6 +249,8 @@
       '<div class="growth-soft-alert" id="correction-note">' + correctionText + '</div>' : '';
     return '<button type="button" class="growth-back-link" data-measure-back>‹ Kembali ke daftar pengukuran</button>' +
       '<h3 class="growth-section-title">' + type.title + '</h3>' +
+      '<div class="growth-card shared-measure-date"><span>Tanggal pengukuran</span><b>' +
+      escapeHtml(displayDate(growth.measurementDate)) + '</b><small>Tanggal ditetapkan di halaman Pengukuran.</small></div>' +
       '<div class="growth-card last-measure-grid"><div><span>Pengukuran terakhir</span><b>' +
       escapeHtml(last ? displayDate(last.tanggal_ukur) : 'Belum ada') + '</b></div><div><span>Nilai terakhir</span><b>' +
       escapeHtml(last ? last.nilai + ' ' + type.unit : 'Belum ada') + '</b></div></div>' +
@@ -256,79 +258,10 @@
       '<div class="large-number"><input id="measure-value" type="number" inputmode="decimal" min="' + type.min +
       '" max="' + type.max + '" step="0.01" placeholder="0,00" aria-describedby="measure-error"><span>' + type.unit + '</span></div>' +
       '<div class="growth-error inline-error" id="measure-error" aria-live="polite"></div>' +
-      '<label class="growth-label" for="measure-date">Tanggal pengukuran</label>' +
-      '<input class="growth-input" id="measure-date" type="date" max="' + today + '" value="' + today + '">' +
       '<label class="growth-label" for="measure-note">Catatan (opsional)</label>' +
       '<textarea class="growth-input" id="measure-note" rows="3" maxlength="2000" placeholder="Contoh: kondisi saat pengukuran"></textarea>' +
       '<div class="growth-actions"><button type="button" class="growth-button" data-measure-save>Simpan</button>' +
       '<button type="button" class="growth-button secondary" data-measure-repeat>Ulangi</button></div>';
-  }
-
-  function graphHtml() {
-    var choices = [
-      ['berat', 'Berat badan'], ['tinggi', 'Panjang/Tinggi'], ['lingkar_kepala', 'Lingkar kepala']
-    ];
-    var points = measurements().filter(function (item) { return item.jenis === growth.chartType; });
-    var pills = choices.map(function (choice) {
-      return '<button type="button" data-chart-type="' + choice[0] + '" class="' +
-        (growth.chartType === choice[0] ? 'active' : '') + '">' + choice[1] + '</button>';
-    }).join('');
-    if (points.length < 2) {
-      return '<div class="growth-chart-pills">' + pills + '</div><div class="growth-empty">' +
-        '<span aria-hidden="true">🌱</span><b>Grafik akan tumbuh bersama catatan</b>' +
-        '<p>Tambahkan minimal dua pengukuran untuk melihat perkembangan dari bulan ke bulan.</p>' +
-        '<button type="button" class="growth-button" data-growth-tab="pengukuran">Tambah pengukuran</button></div>';
-    }
-    if (typeof Chart === 'undefined') {
-      return '<div class="growth-chart-pills">' + pills + '</div>' +
-        '<div class="growth-error" role="alert">Grafik belum dapat dimuat. Periksa koneksi internet lalu coba lagi.</div>';
-    }
-    return '<div class="growth-chart-pills">' + pills + '</div><div class="growth-card chart-card">' +
-      '<canvas id="growth-chart" aria-label="Grafik pertumbuhan balita" role="img"></canvas></div>';
-  }
-
-  function chartAge(date) {
-    return ageAt(date);
-  }
-
-  function createChart() {
-    var canvas = document.getElementById('growth-chart');
-    if (!canvas || typeof Chart === 'undefined') return;
-    var type = growth.chartType;
-    var points = measurements().filter(function (item) { return item.jenis === type; });
-    if (points.length < 2) return;
-    var context = canvas.getContext('2d');
-    var gradient = context.createLinearGradient(0, 0, 0, 260);
-    gradient.addColorStop(0, 'rgba(225, 29, 99, .28)');
-    gradient.addColorStop(1, 'rgba(225, 29, 99, .015)');
-    growth.chart = new Chart(context, {
-      type: 'line',
-      data: {
-        labels: points.map(function (item) { return chartAge(item.tanggal_ukur) + ' bln'; }),
-        datasets: [{
-          label: labels[type].title + ' (' + labels[type].unit + ')',
-          data: points.map(function (item) { return Number(item.nilai); }),
-          borderColor: '#E11D63',
-          backgroundColor: gradient,
-          pointBackgroundColor: '#F43F7A',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 5,
-          borderWidth: 3,
-          fill: true,
-          tension: .35
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { display: false }, ticks: { color: '#8A6672' } },
-          y: { beginAtZero: false, grid: { color: '#FFE4EC' }, ticks: { color: '#8A6672' } }
-        }
-      }
-    });
   }
 
   function eligible(type) {
@@ -416,10 +349,6 @@
 
   function renderGrowth() {
     if (!growth.child || growth.page !== 'detail' && growth.page !== 'measurement') return;
-    if (growth.chart) {
-      growth.chart.destroy();
-      growth.chart = null;
-    }
     var view = document.getElementById('view');
     document.getElementById('fab').style.display = 'none';
     if (growth.page === 'measurement') {
@@ -430,19 +359,16 @@
     var content = '';
     if (growth.section === 'profil') content = profileHtml();
     if (growth.section === 'pengukuran') content = measurementsHtml();
-    if (growth.section === 'grafik') content = graphHtml();
     if (growth.section === 'vitamin') content = vitaminsHtml();
     if (growth.section === 'catatan') content = visitsHtml();
     view.innerHTML = headerHtml() + tabsHtml() + statusHtml() + '<div class="growth-content">' + content + '</div>';
-    if (growth.section === 'grafik') createChart();
   }
 
   function updateCorrectionNote() {
     if (growth.kind !== 'tinggi') return;
     var note = document.getElementById('correction-note');
-    var date = document.getElementById('measure-date');
-    if (!note || !date) return;
-    var correction = correctionFor(growth.method, date.value);
+    if (!note) return;
+    var correction = correctionFor(growth.method, growth.measurementDate);
     note.textContent = correction > 0 ?
       'Hasil ukur berdiri dikoreksi otomatis +0,7 cm karena umur saat pengukuran 0–24 bulan.' :
       correction < 0 ?
@@ -453,8 +379,8 @@
   function showHeightChoice() {
     var sheet = document.getElementById('sheet');
     sheet.innerHTML = '<h2>Pilih cara ukur tinggi badan</h2><p class="growth-hint">Tentukan posisi balita sebelum memasukkan hasil.</p>' +
-      '<div class="height-choice"><button type="button" data-height-method="berbaring"><span>🛏️</span><b>Berbaring</b></button>' +
-      '<button type="button" data-height-method="berdiri"><span>🧍</span><b>Berdiri</b></button></div>' +
+      '<div class="height-choice"><button type="button" data-height-method="berbaring"><img src="assets/images/infantometer.svg" alt="" aria-hidden="true"><b>Berbaring</b></button>' +
+      '<button type="button" data-height-method="berdiri"><img src="assets/images/stadiometer.svg" alt="" aria-hidden="true"><b>Berdiri</b></button></div>' +
       '<button type="button" class="btn ghost" data-modal-close>Batal</button>';
     document.getElementById('modal').classList.add('show');
   }
@@ -525,7 +451,7 @@
   function readMeasurementForm() {
     var type = labels[growth.kind];
     var value = document.getElementById('measure-value').value.trim().replace(',', '.');
-    var date = document.getElementById('measure-date').value;
+    var date = growth.measurementDate;
     var note = document.getElementById('measure-note').value.trim();
     var error = document.getElementById('measure-error');
     var number = Number(value);
@@ -537,8 +463,8 @@
       error.textContent = 'Nilai ' + type.title.toLowerCase() + ' harus antara ' + type.min + '–' + type.max + ' ' + type.unit + '.';
       return;
     }
-    if (!date || date > todayString()) {
-      error.textContent = 'Tanggal pengukuran wajib diisi dan tidak boleh melewati hari ini.';
+    if (!date || date < selectedChild().lahir || date > todayString()) {
+      error.textContent = 'Tanggal pengukuran harus berada di antara tanggal lahir dan hari ini.';
       return;
     }
     if (growth.kind === 'tinggi') {
@@ -561,8 +487,6 @@
   document.addEventListener('click', function (event) {
     var navButton = event.target.closest('[data-t]');
     if (!navButton) return;
-    if (growth.chart) growth.chart.destroy();
-    growth.chart = null;
     growth.page = '';
     growth.child = null;
     if (location.hash) history.replaceState(null, '', location.pathname + location.search);
@@ -581,7 +505,12 @@
     if (!target) return;
 
     if (target.hasAttribute('data-growth-back')) {
-      if (history.state && history.state.growthDetail) {
+      if (growth.page === 'measurement') {
+        growth.page = 'detail';
+        growth.section = 'pengukuran';
+        growth.error = '';
+        renderGrowth();
+      } else if (history.state && history.state.growthDetail) {
         history.back();
       } else {
         history.replaceState(null, '', location.pathname + location.search);
@@ -629,7 +558,6 @@
     }
     if (target.hasAttribute('data-measure-repeat')) {
       document.getElementById('measure-value').value = '';
-      document.getElementById('measure-date').value = todayString();
       document.getElementById('measure-note').value = '';
       document.getElementById('measure-error').textContent = '';
       updateCorrectionNote();
@@ -641,11 +569,6 @@
     }
     if (target.hasAttribute('data-modal-close')) {
       closeM();
-      return;
-    }
-    if (target.hasAttribute('data-chart-type')) {
-      growth.chartType = target.getAttribute('data-chart-type');
-      renderGrowth();
       return;
     }
     if (target.hasAttribute('data-vitamin-status')) {
@@ -666,7 +589,6 @@
 
   document.addEventListener('input', function (event) {
     var date = event.target;
-    if (date.id === 'measure-date') updateCorrectionNote();
     if (date.hasAttribute('data-vitamin-date')) {
       var type = date.getAttribute('data-vitamin-date');
       vitaminDraft(type).date = date.value;
@@ -674,7 +596,13 @@
   });
 
   document.addEventListener('change', function (event) {
-    if (event.target.id === 'measure-date') updateCorrectionNote();
+    if (event.target.id === 'measurement-visit-date') {
+      var selectedDate = event.target.value;
+      var dateError = selectedDate < selectedChild().lahir || selectedDate > todayString();
+      event.target.setCustomValidity(dateError ? 'Tanggal harus berada di antara tanggal lahir dan hari ini.' : '');
+      growth.measurementDate = selectedDate;
+      renderGrowth();
+    }
   });
 
   window.addEventListener('popstate', syncDetailRoute);
@@ -684,8 +612,6 @@
     showListFromRoute();
   });
   window.exitGrowthForEdit = function () {
-    if (growth.chart) growth.chart.destroy();
-    growth.chart = null;
     growth.page = '';
     growth.child = null;
     history.replaceState(null, '', location.pathname + location.search);

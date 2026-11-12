@@ -906,6 +906,17 @@ nav button.on {
   font-size: 23px;
 }
 
+.measure-icon img {
+  width: 35px;
+  height: 35px;
+  object-fit: contain;
+}
+
+.measure-card:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
 .growth-profile h3,
 .vitamin-card h3 {
   margin: 3px 0;
@@ -1037,6 +1048,45 @@ nav button.on {
   min-width: 0;
   flex-direction: column;
   gap: 5px;
+}
+
+.shared-measure-date {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 12px 0;
+  padding: 12px 14px;
+}
+
+.shared-measure-date span,
+.shared-measure-date small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.shared-measure-date b {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.elder-swipe-area {
+  touch-action: pan-y;
+}
+
+.elder-measure-cards {
+  margin-top: 15px;
+}
+
+.elder-measure-form .detail-identity {
+  margin-bottom: 14px;
+}
+
+.elder-measure-form .growth-actions {
+  margin-top: 18px;
+}
+
+.elder-measure-form .growth-actions button {
+  width: 100%;
 }
 
 .measure-mode {
@@ -1179,6 +1229,31 @@ textarea.growth-input {
 
 .growth-profile-actions .growth-button {
   min-width: 180px;
+}
+
+.export-card {
+  margin: 20px 0;
+}
+
+.export-card > h2 {
+  margin: 0 0 8px;
+}
+
+.export-card .growth-actions {
+  margin-bottom: 4px;
+}
+
+.export-card .growth-button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.export-status {
+  min-height: 18px;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .growth-error.inline-error {
@@ -1415,8 +1490,76 @@ textarea.growth-input {
   cursor: pointer;
 }
 
-.height-choice button span {
-  font-size: 27px;
+.height-choice button img {
+  width: 44px;
+  height: 44px;
+}
+
+.elder-measure-section {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rose-border);
+}
+
+.elder-measure-section > h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+}
+
+.elder-measure-history {
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.elder-measure-entry {
+  padding: 12px;
+  border: 1px solid var(--rose-border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.elder-measure-entry > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.elder-measure-entry b {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.elder-measure-entry time {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.elder-measure-entry strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--rose-strong);
+  font-size: 17px;
+}
+
+.elder-measure-entry p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.elder-blood-pressure-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.elder-blood-pressure-fields .growth-label {
+  margin-top: 9px;
 }
 
 .confirm-mark {
