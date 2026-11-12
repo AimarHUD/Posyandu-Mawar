@@ -16,6 +16,7 @@ try {
   }
 
   $columns = [
+    'alamat' => 'TEXT NULL',
     'jenis_kelamin' => 'VARCHAR(10) NULL',
     'anak_ke' => 'SMALLINT UNSIGNED NULL',
     'nomor_kk' => 'VARCHAR(16) NULL',
@@ -26,6 +27,7 @@ try {
     'berat_lahir' => 'DECIMAL(5,2) NULL',
     'panjang_lahir' => 'DECIMAL(5,2) NULL',
     'lingkar_kepala_lahir' => 'DECIMAL(5,2) NULL',
+    'lingkar_lengan_lahir' => 'DECIMAL(5,2) NULL',
     'lulus_manual' => 'TINYINT(1) NOT NULL DEFAULT 0',
   ];
   $existingColumns = $pdo->query('SHOW COLUMNS FROM balita')->fetchAll(PDO::FETCH_COLUMN);
@@ -37,9 +39,9 @@ try {
 
   if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $rows = $pdo->query(
-      'SELECT id, nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nomor_kk, nik,
+      'SELECT id, nama, tanggal_lahir, alamat, nama_ortu, jenis_kelamin, anak_ke, nomor_kk, nik,
               nama_ibu, nama_ayah, imd,
-              berat_lahir, panjang_lahir, lingkar_kepala_lahir, lulus_manual
+              berat_lahir, panjang_lahir, lingkar_kepala_lahir, lingkar_lengan_lahir, lulus_manual
        FROM balita ORDER BY id DESC'
     )->fetchAll();
     respond(200, ['data' => array_map('formatBalita', $rows)]);
@@ -73,9 +75,9 @@ try {
       respond(404, ['error' => 'Data balita tidak ditemukan.']);
     }
     $stmt = $pdo->prepare(
-      'SELECT id, nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nomor_kk, nik,
+      'SELECT id, nama, tanggal_lahir, alamat, nama_ortu, jenis_kelamin, anak_ke, nomor_kk, nik,
               nama_ibu, nama_ayah, imd,
-              berat_lahir, panjang_lahir, lingkar_kepala_lahir, lulus_manual
+              berat_lahir, panjang_lahir, lingkar_kepala_lahir, lingkar_lengan_lahir, lulus_manual
        FROM balita WHERE id = ?'
     );
     $stmt->execute([$id]);
@@ -84,6 +86,7 @@ try {
 
   $name = trim((string)($input['nama'] ?? ''));
   $birthDate = (string)($input['lahir'] ?? '');
+  $address = trim((string)($input['alamat'] ?? ''));
   $gender = $input['gender'] ?? null;
   $childOrder = $input['anakKe'] ?? null;
   $householdNumber = trim((string)($input['nomorKK'] ?? ''));
@@ -121,12 +124,15 @@ try {
   if (mb_strlen($legacyParent, 'UTF-8') > 100) {
     respond(422, ['error' => 'Nama orang tua/wali lama maksimal 100 karakter.']);
   }
+  if (mb_strlen($address, 'UTF-8') > 16000) {
+    respond(422, ['error' => 'Alamat terlalu panjang.']);
+  }
   if ($imd !== null && !in_array($imd, ['Ya', 'Tidak'], true)) {
     respond(422, ['error' => 'Pilihan IMD tidak valid.']);
   }
 
   $measurements = [];
-  foreach (['beratLahir', 'panjangLahir', 'lingkarKepala'] as $field) {
+  foreach (['beratLahir', 'panjangLahir', 'lingkarKepala', 'lingkarLenganLahir'] as $field) {
     $value = $input[$field] ?? null;
     if ($value === '' || $value === null) {
       $measurements[] = null;
@@ -141,6 +147,7 @@ try {
   $values = [
     $name,
     $birthDate,
+    $address !== '' ? $address : null,
     $gender,
     $childOrder !== null && $childOrder !== '' ? (int)$childOrder : null,
     $householdNumber !== '' ? $householdNumber : null,
@@ -151,6 +158,7 @@ try {
     $measurements[0],
     $measurements[1],
     $measurements[2],
+    $measurements[3],
   ];
   $id = null;
   if (array_key_exists('id', $input)) {
@@ -163,9 +171,9 @@ try {
   if ($id) {
     $legacyParentUpdate = $hasLegacyParent ? ', nama_ortu = ?' : '';
     $stmt = $pdo->prepare(
-      'UPDATE balita SET nama = ?, tanggal_lahir = ?, jenis_kelamin = ?,
+      'UPDATE balita SET nama = ?, tanggal_lahir = ?, alamat = ?, jenis_kelamin = ?,
        anak_ke = ?, nomor_kk = ?, nik = ?, nama_ibu = ?, nama_ayah = ?, imd = ?, berat_lahir = ?, panjang_lahir = ?,
-       lingkar_kepala_lahir = ?' . $legacyParentUpdate . ' WHERE id = ?'
+       lingkar_kepala_lahir = ?, lingkar_lengan_lahir = ?' . $legacyParentUpdate . ' WHERE id = ?'
     );
     $stmt->execute(array_merge(
       $values,
@@ -179,9 +187,9 @@ try {
   } else {
     $stmt = $pdo->prepare(
       'INSERT INTO balita
-       (nama, tanggal_lahir, jenis_kelamin, anak_ke, nomor_kk, nik, nama_ibu, nama_ayah, imd,
-        berat_lahir, panjang_lahir, lingkar_kepala_lahir, nama_ortu)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+       (nama, tanggal_lahir, alamat, jenis_kelamin, anak_ke, nomor_kk, nik, nama_ibu, nama_ayah, imd,
+        berat_lahir, panjang_lahir, lingkar_kepala_lahir, lingkar_lengan_lahir, nama_ortu)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $stmt->execute(array_merge($values, [
       $hasLegacyParent && $legacyParent !== '' ? $legacyParent : null,
@@ -190,9 +198,9 @@ try {
   }
 
   $stmt = $pdo->prepare(
-    'SELECT id, nama, tanggal_lahir, nama_ortu, jenis_kelamin, anak_ke, nomor_kk, nik,
+    'SELECT id, nama, tanggal_lahir, alamat, nama_ortu, jenis_kelamin, anak_ke, nomor_kk, nik,
             nama_ibu, nama_ayah, imd,
-            berat_lahir, panjang_lahir, lingkar_kepala_lahir, lulus_manual
+            berat_lahir, panjang_lahir, lingkar_kepala_lahir, lingkar_lengan_lahir, lulus_manual
      FROM balita WHERE id = ?'
   );
   $stmt->execute([$id]);
@@ -208,6 +216,7 @@ function formatBalita(array $row): array
     'id' => (int)$row['id'],
     'nama' => $row['nama'],
     'lahir' => $row['tanggal_lahir'],
+    'alamat' => $row['alamat'],
     'ortu' => $row['nama_ortu'],
     'nomorKK' => $row['nomor_kk'],
     'gender' => $row['jenis_kelamin'],
@@ -219,6 +228,7 @@ function formatBalita(array $row): array
     'beratLahir' => $row['berat_lahir'],
     'panjangLahir' => $row['panjang_lahir'],
     'lingkarKepala' => $row['lingkar_kepala_lahir'],
+    'lingkarLenganLahir' => $row['lingkar_lengan_lahir'],
     'lulusManual' => (bool)$row['lulus_manual'],
   ];
 }

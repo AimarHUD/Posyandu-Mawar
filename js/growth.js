@@ -137,6 +137,7 @@
   function showListFromRoute() {
     growth.page = '';
     growth.child = null;
+    document.getElementById('app').classList.remove('child-detail-screen');
     render();
   }
 
@@ -151,11 +152,10 @@
 
   function headerHtml() {
     var child = selectedChild();
-    return '<div class="growth-heading">' +
-      '<button class="growth-back" data-growth-back type="button" aria-label="Kembali ke daftar balita">‹</button>' +
-      '<div><span class="growth-eyebrow">Pemantauan balita</span><h2>' + escapeHtml(child.nama) + '</h2>' +
-      '<small>' + escapeHtml(umurTxt(bulan(child.lahir))) + ' · Lahir ' + escapeHtml(displayDate(child.lahir)) + '</small></div>' +
-      '</div>';
+    return '<button class="back-link" data-growth-back type="button">← Kembali</button>' +
+      '<div class="detail-identity"><span class="av">👶</span><div><small>Pemantauan balita</small><h1>' +
+      escapeHtml(child.nama) + '</h1><small>' + escapeHtml(umurTxt(bulan(child.lahir))) + ' · Lahir ' +
+      escapeHtml(displayDate(child.lahir)) + '</small></div></div>';
   }
 
   function tabsHtml() {
@@ -189,20 +189,21 @@
     var child = selectedChild();
     return '<section class="bio-section"><div class="bio-heading"><h2>Biodata Anak</h2><button class="text-action" data-edit-child type="button">Ubah</button></div>' +
       '<dl class="bio-list">' +
-      '<div><dt>Nama</dt><dd>' + escapeHtml(child.nama) + '</dd></div>' +
+      '<div><dt>Nama Anak</dt><dd>' + escapeHtml(child.nama) + '</dd></div>' +
       '<div><dt>Jenis Kelamin</dt><dd>' + displayValue(child.gender) + '</dd></div>' +
       '<div><dt>Tanggal Lahir</dt><dd>' + escapeHtml(displayDate(child.lahir)) + '</dd></div>' +
-      '<div><dt>Umur</dt><dd>' + escapeHtml(umurTxt(bulan(child.lahir))) + '</dd></div>' +
+      '<div><dt>Alamat</dt><dd>' + displayValue(child.alamat) + '</dd></div>' +
       '<div><dt>Anak Ke-</dt><dd>' + displayValue(child.anakKe) + '</dd></div>' +
+      '<div><dt>Nama Ibu</dt><dd>' + displayValue(child.namaIbu) + '</dd></div>' +
+      '<div><dt>Nama Ayah</dt><dd>' + displayValue(child.namaAyah) + '</dd></div>' +
       '<div><dt>Nomor KK</dt><dd>' + displayValue(child.nomorKK) + '</dd></div>' +
       '<div><dt>NIK Anak</dt><dd>' + displayValue(child.nik) + '</dd></div>' +
-      '<div><dt>Inisiasi Menyusu Dini (IMD)</dt><dd>' + displayValue(child.imd) + '</dd></div>' +
-      '<div><dt>Ibu Anak</dt><dd>' + displayValue(child.namaIbu) + '</dd></div>' +
-      '<div><dt>Ayah Anak</dt><dd>' + displayValue(child.namaAyah) + '</dd></div></dl></section>' +
+      '<div><dt>Inisiasi Menyusu Dini (IMD)</dt><dd>' + displayValue(child.imd) + '</dd></div></dl></section>' +
       '<section class="bio-section"><div class="bio-heading"><h2>Data Timbang</h2><button class="text-action" data-edit-child type="button">Ubah</button></div>' +
       '<dl class="bio-list"><div><dt>Berat Badan Lahir</dt><dd>' + displayValue(child.beratLahir, ' kg') + '</dd></div>' +
       '<div><dt>Panjang Badan Lahir</dt><dd>' + displayValue(child.panjangLahir, ' cm') + '</dd></div>' +
-      '<div><dt>Lingkar Kepala Lahir</dt><dd>' + displayValue(child.lingkarKepala, ' cm') + '</dd></div></dl></section>' +
+      '<div><dt>Lingkar Kepala Lahir</dt><dd>' + displayValue(child.lingkarKepala, ' cm') + '</dd></div>' +
+      '<div><dt>Lingkar Lengan Lahir</dt><dd>' + displayValue(child.lingkarLenganLahir, ' cm') + '</dd></div></dl></section>' +
       (!lulus(child) ? '<div class="growth-profile-actions"><button type="button" class="growth-button secondary" data-graduate-profile="' +
         escapeHtml(child.id) + '">Lulus</button></div>' : '');
   }
@@ -335,8 +336,14 @@
     }
     return '<div class="visit-timeline">' + dates.map(function (date) {
       var visit = visits[date];
-      var lines = visit.measurements.map(function (item) {
-        return labels[item.jenis].title + ': ' + item.nilai + ' ' + labels[item.jenis].unit;
+      var latestByType = {};
+      visit.measurements.forEach(function (item) {
+        latestByType[item.jenis] = item;
+      });
+      var lines = Object.keys(latestByType).map(function (kind) {
+        var item = latestByType[kind];
+        var label = labels[kind];
+        return label.title + ': ' + item.nilai + ' ' + label.unit;
       });
       visit.vitamins.forEach(function (item) {
         lines.push('Vitamin A kapsul ' + (item.jenis_kapsul === 'biru' ? 'biru' : 'merah') +
@@ -350,9 +357,11 @@
   function renderGrowth() {
     if (!growth.child || growth.page !== 'detail' && growth.page !== 'measurement') return;
     var view = document.getElementById('view');
+    document.getElementById('app').classList.add('child-detail-screen');
     document.getElementById('fab').style.display = 'none';
+    var shell = '<section class="child-page detail-page">' + headerHtml() + '<div class="child-content">';
     if (growth.page === 'measurement') {
-      view.innerHTML = headerHtml() + statusHtml() + measurementFormHtml();
+      view.innerHTML = shell + statusHtml() + measurementFormHtml() + '</div></section>';
       updateCorrectionNote();
       return;
     }
@@ -361,7 +370,7 @@
     if (growth.section === 'pengukuran') content = measurementsHtml();
     if (growth.section === 'vitamin') content = vitaminsHtml();
     if (growth.section === 'catatan') content = visitsHtml();
-    view.innerHTML = headerHtml() + tabsHtml() + statusHtml() + '<div class="growth-content">' + content + '</div>';
+    view.innerHTML = shell + tabsHtml() + statusHtml() + '<div class="growth-content">' + content + '</div></div></section>';
   }
 
   function updateCorrectionNote() {
@@ -615,6 +624,18 @@
     growth.page = '';
     growth.child = null;
     history.replaceState(null, '', location.pathname + location.search);
+  };
+  window.openBalitaDetail = function (id, notice, replaceHistory) {
+    screen = 'main';
+    render();
+    var url = location.pathname + location.search + '#balita-' + encodeURIComponent(id);
+    if (replaceHistory) {
+      history.replaceState({ growthDetail: true }, '', url);
+    } else {
+      history.pushState({ growthDetail: true }, '', url);
+    }
+    openChild(id);
+    if (notice) growth.notice = notice;
   };
 
   var originalRender = render;

@@ -44,13 +44,7 @@ try {
       if (!$stmt->fetchColumn()) {
         respondLansia(404, ['error' => 'Data lansia tidak ditemukan.']);
       }
-      $stmt = $pdo->prepare(
-        'SELECT id, tanggal_kunjungan, catatan, created_at
-         FROM catatan_kunjungan_lansia WHERE lansia_id = ?
-         ORDER BY tanggal_kunjungan DESC, id DESC'
-      );
-      $stmt->execute([$id]);
-      respondLansia(200, ['data' => $stmt->fetchAll()]);
+      respondLansia(200, ['data' => fetchLansiaVisitTimeline($pdo, $id)]);
     }
 
     if (isset($_GET['measurements'])) {
@@ -82,8 +76,8 @@ try {
     respondLansia(200, ['data' => array_map('formatLansia', $rows)]);
   }
 
-  if (!in_array($_SERVER['REQUEST_METHOD'], ['POST', 'DELETE'], true)) {
-    header('Allow: GET, POST, DELETE');
+  if (!in_array($_SERVER['REQUEST_METHOD'], ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+    header('Allow: GET, POST, PUT, PATCH, DELETE');
     respondLansia(405, ['error' => 'Metode permintaan tidak didukung.']);
   }
 
@@ -95,6 +89,16 @@ try {
   $input = json_decode(file_get_contents('php://input'), true);
   if (!is_array($input)) {
     respondLansia(400, ['error' => 'Data yang dikirim tidak valid.']);
+  }
+
+  if (in_array($_SERVER['REQUEST_METHOD'], ['PUT', 'PATCH'], true)) {
+    if (isset($input['action'])) {
+      header('Allow: POST');
+      respondLansia(405, ['error' => 'Metode ubah hanya berlaku untuk biodata lansia.']);
+    }
+    if (!array_key_exists('id', $input)) {
+      respondLansia(422, ['error' => 'ID lansia wajib disertakan untuk mengubah biodata.']);
+    }
   }
 
   if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
@@ -161,6 +165,9 @@ try {
   $guardian = trim((string)($input['namaPendamping'] ?? ''));
   $guardianPhone = trim((string)($input['nomorHpPendamping'] ?? ''));
   $gender = $input['gender'] ?? null;
+  if ($gender === '') {
+    $gender = null;
+  }
   $date = DateTimeImmutable::createFromFormat('!Y-m-d', $birthDate);
   $dateErrors = DateTimeImmutable::getLastErrors();
   if (
@@ -289,13 +296,56 @@ function saveLansiaVisitNote(PDO $pdo, array $input): array
      VALUES (?, ?, ?)'
   );
   $stmt->execute([$id, $date, trim($noteValue)]);
+  return fetchLansiaVisitTimeline($pdo, $id);
+}
+
+function fetchLansiaVisitTimeline(PDO $pdo, int $id): array
+{
+  $visits = [];
   $stmt = $pdo->prepare(
-    'SELECT id, tanggal_kunjungan, catatan, created_at
+    'SELECT jenis, nilai, sistolik, diastolik, tanggal_ukur, catatan
+     FROM pengukuran_lansia WHERE lansia_id = ?
+     ORDER BY tanggal_ukur DESC, id DESC'
+  );
+  $stmt->execute([$id]);
+  foreach ($stmt->fetchAll() as $measurement) {
+    $date = $measurement['tanggal_ukur'];
+    if (!isset($visits[$date])) {
+      $visits[$date] = [
+        'tanggal_kunjungan' => $date,
+        'measurements' => [],
+        'catatan' => [],
+      ];
+    }
+    $visits[$date]['measurements'][] = [
+      'jenis' => $measurement['jenis'],
+      'nilai' => $measurement['nilai'],
+      'sistolik' => $measurement['sistolik'],
+      'diastolik' => $measurement['diastolik'],
+      'catatan' => $measurement['catatan'],
+    ];
+  }
+
+  $stmt = $pdo->prepare(
+    'SELECT tanggal_kunjungan, catatan
      FROM catatan_kunjungan_lansia WHERE lansia_id = ?
      ORDER BY tanggal_kunjungan DESC, id DESC'
   );
   $stmt->execute([$id]);
-  return $stmt->fetchAll();
+  foreach ($stmt->fetchAll() as $note) {
+    $date = $note['tanggal_kunjungan'];
+    if (!isset($visits[$date])) {
+      $visits[$date] = [
+        'tanggal_kunjungan' => $date,
+        'measurements' => [],
+        'catatan' => [],
+      ];
+    }
+    $visits[$date]['catatan'][] = $note['catatan'];
+  }
+
+  krsort($visits);
+  return array_values($visits);
 }
 
 function saveLansiaMeasurement(PDO $pdo, array $input): array
