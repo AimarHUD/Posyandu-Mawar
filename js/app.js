@@ -24,8 +24,7 @@ var storageError = '';
 var balitaSearch = '';
 var lansiaSearch = '';
 var elderMeasurements = { personId: null, records: [], loading: false, error: '' };
-var elderVisitNotes = { personId: null, records: [], loading: false, loaded: false, error: '' };
-var elderVisitDate = iso(new Date());
+var elderVisitHistory = { personId: null, records: [], loading: false, loaded: false, error: '' };
 var elderMeasurementTypes = {
   berat: { title: 'Berat Badan', unit: 'kg', image: 'assets/images/scale.svg', min: 1, max: 300, step: '0.01' },
   tinggi: { title: 'Tinggi Badan', unit: 'cm', image: 'assets/images/stadiometer.svg', min: 50, max: 250, step: '0.1' },
@@ -219,22 +218,18 @@ async function requestElderMeasurements(personId, payload) {
   return result.data;
 }
 
-async function requestElderVisitNotes(personId, payload) {
-  var options = { method: payload ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', headers: {} };
-  if (payload) {
-    options.headers['Content-Type'] = 'application/json';
-    options.headers['X-CSRF-Token'] = document.querySelector('meta[name="csrf-token"]').content;
-    options.body = JSON.stringify(payload);
-  }
-  var url = 'api-lansia.php' + (payload ? '' : '?visit_notes=' + encodeURIComponent(personId));
-  var response = await fetch(url, options);
+async function requestElderVisitHistory(personId) {
+  var response = await fetch(
+    'api-lansia.php?visit_notes=' + encodeURIComponent(personId),
+    { credentials: 'same-origin', cache: 'no-store' }
+  );
   var result;
   try {
     result = await response.json();
   } catch (error) {
     throw new Error('Respons server tidak dapat dibaca.');
   }
-  if (!response.ok) throw new Error(result.error || 'Permintaan catatan kunjungan gagal.');
+  if (!response.ok) throw new Error(result.error || 'Permintaan riwayat kunjungan gagal.');
   return result.data;
 }
 
@@ -479,7 +474,7 @@ function renderElderDetail(view) {
   }
   var records = elderMeasurements.personId === person.id ? elderMeasurements.records : [];
   var sectionHtml = elderSection === 'profil' ? elderProfileHtml(person) :
-    elderSection === 'pengukuran' ? elderMeasurementsHtml(person, records) : elderVisitNotesHtml(person);
+    elderSection === 'pengukuran' ? elderMeasurementsHtml(person, records) : elderVisitHistoryHtml(person);
   var noticeHtml = elderNotice ? '<div class="growth-success" role="status">' + esc(elderNotice) + '</div>' : '';
   elderNotice = '';
   view.innerHTML = '<section class="child-page detail-page"><button class="back-link" data-back type="button">← Kembali</button>' +
@@ -491,8 +486,8 @@ function renderElderDetail(view) {
     '" class="' + (elderSection === 'profil' ? 'active' : '') + '">Profil</button>' +
     '<button type="button" role="tab" data-elder-tab="pengukuran" aria-selected="' + (elderSection === 'pengukuran') +
     '" class="' + (elderSection === 'pengukuran' ? 'active' : '') + '">Pengukuran</button>' +
-    '<button type="button" role="tab" data-elder-tab="catatan" aria-selected="' + (elderSection === 'catatan') +
-    '" class="' + (elderSection === 'catatan' ? 'active' : '') + '">Catatan Kunjungan</button></div>' +
+    '<button type="button" role="tab" data-elder-tab="riwayat" aria-selected="' + (elderSection === 'riwayat') +
+    '" class="' + (elderSection === 'riwayat' ? 'active' : '') + '">Riwayat Kunjungan</button></div>' +
     '<div class="growth-content elder-swipe-area">' + sectionHtml + '</div></div></section>';
 }
 
@@ -553,36 +548,36 @@ function elderMeasurementsHtml(person, records) {
 }
 
 function switchElderSection(section) {
-  if (section !== 'profil' && section !== 'pengukuran' && section !== 'catatan') return;
+  if (section !== 'profil' && section !== 'pengukuran' && section !== 'riwayat') return;
   elderSection = section;
   elderMeasurementPage = false;
   render();
-  if (section === 'catatan' &&
-    (elderVisitNotes.personId !== selectedElderId || !elderVisitNotes.loaded && !elderVisitNotes.loading)) {
-    loadElderVisitNotes(selectedElderId);
+  if (section === 'riwayat' &&
+    (elderVisitHistory.personId !== selectedElderId || !elderVisitHistory.loaded && !elderVisitHistory.loading)) {
+    loadElderVisitHistory(selectedElderId);
   }
 }
 
-function loadElderVisitNotes(personId) {
-  elderVisitNotes = { personId: personId, records: [], loading: true, loaded: false, error: '' };
+function loadElderVisitHistory(personId) {
+  elderVisitHistory = { personId: personId, records: [], loading: true, loaded: false, error: '' };
   render();
-  requestElderVisitNotes(personId).then(function (records) {
+  requestElderVisitHistory(personId).then(function (records) {
     if (selectedElderId !== personId) return;
-    elderVisitNotes = { personId: personId, records: records, loading: false, loaded: true, error: '' };
+    elderVisitHistory = { personId: personId, records: records, loading: false, loaded: true, error: '' };
     render();
   }).catch(function (error) {
     if (selectedElderId !== personId) return;
-    elderVisitNotes = { personId: personId, records: [], loading: false, loaded: false, error: error.message };
+    elderVisitHistory = { personId: personId, records: [], loading: false, loaded: false, error: error.message };
     render();
   });
 }
 
-function elderVisitNotesHtml(person) {
-  var state = elderVisitNotes.personId === person.id ? elderVisitNotes :
+function elderVisitHistoryHtml(person) {
+  var state = elderVisitHistory.personId === person.id ? elderVisitHistory :
     { records: [], loading: false, loaded: false, error: '' };
-  var historyHtml = state.loading ? '<p class="growth-hint">Memuat catatan kunjungan...</p>' :
+  var historyHtml = state.loading ? '<p class="growth-hint">Memuat riwayat kunjungan...</p>' :
     state.error ? '<div class="alert error-notice" role="alert">' + esc(state.error) +
-      ' <button type="button" class="link" data-elder-notes-retry>Coba lagi</button></div>' :
+      ' <button type="button" class="link" data-elder-history-retry>Coba lagi</button></div>' :
       state.records.length ? '<div class="visit-timeline">' + state.records.map(function (item) {
         var lines = (item.measurements || []).map(function (measurement) {
           var type = elderMeasurementTypes[measurement.jenis];
@@ -601,48 +596,8 @@ function elderVisitNotesHtml(person) {
           esc(lines.join(' · ') || 'Kunjungan tercatat') + '</p></article>';
       }).join('') + '</div>' :
         '<div class="growth-empty"><span aria-hidden="true">🌸</span><b>Belum ada riwayat kunjungan</b>' +
-        '<p>Pengukuran dan catatan kunjungan yang tersimpan akan tampil di sini.</p></div>';
-  return '<section class="elder-measure-section"><h2>Catatan Kunjungan</h2>' +
-    '<label class="growth-label" for="elder-visit-note-date">Tanggal kunjungan</label>' +
-    '<input class="growth-input" id="elder-visit-note-date" type="date" min="' + esc(person.lahir) +
-    '" max="' + iso(today) + '" value="' + esc(elderVisitDate) + '">' +
-    '<label class="growth-label" for="elder-visit-note">Catatan</label>' +
-    '<textarea class="growth-input" id="elder-visit-note" rows="4" maxlength="2000" placeholder="Tulis catatan kunjungan"></textarea>' +
-    '<div class="growth-error inline-error" id="elder-visit-note-error" aria-live="polite"></div>' +
-    '<div class="growth-actions"><button type="button" class="growth-button" data-elder-note-save>Simpan Catatan</button></div>' +
-    '<h3 class="growth-section-title">Riwayat Kunjungan</h3>' + historyHtml + '</section>';
-}
-
-async function saveElderVisitNote(button) {
-  var date = document.getElementById('elder-visit-note-date').value;
-  var note = document.getElementById('elder-visit-note').value.trim();
-  var errorElement = document.getElementById('elder-visit-note-error');
-  var person = db.lansia.find(function (item) { return item.id === selectedElderId; });
-  if (!date || date < person.lahir || date > iso(today)) {
-    errorElement.textContent = 'Tanggal kunjungan wajib diisi, tidak boleh sebelum tanggal lahir atau melewati hari ini.';
-    return;
-  }
-  if (!note || note.length > 2000) {
-    errorElement.textContent = 'Catatan kunjungan wajib diisi dan maksimal 2.000 karakter.';
-    return;
-  }
-  elderVisitDate = date;
-  button.disabled = true;
-  errorElement.textContent = 'Menyimpan catatan...';
-  try {
-    var records = await requestElderVisitNotes(selectedElderId, {
-      action: 'visit_note',
-      id: selectedElderId,
-      tanggal_kunjungan: date,
-      catatan: note
-    });
-    elderVisitNotes = { personId: selectedElderId, records: records, loading: false, loaded: true, error: '' };
-    elderVisitDate = iso(today);
-    render();
-  } catch (error) {
-    errorElement.textContent = error.message;
-    button.disabled = false;
-  }
+        '<p>Riwayat pengukuran dan kunjungan lansia akan tampil di sini.</p></div>';
+  return '<section class="elder-measure-section"><h2>Riwayat Kunjungan</h2>' + historyHtml + '</section>';
 }
 
 function loadElderMeasurements(personId) {
@@ -1066,8 +1021,7 @@ document.addEventListener('click', function (event) {
     elderMeasurementKind = '';
     elderMeasurementDate = iso(today);
     elderMeasurements = { personId: selectedElderId, records: [], loading: false, error: '' };
-    elderVisitNotes = { personId: selectedElderId, records: [], loading: false, loaded: false, error: '' };
-    elderVisitDate = iso(today);
+    elderVisitHistory = { personId: selectedElderId, records: [], loading: false, loaded: false, error: '' };
     render();
     window.scrollTo(0, 0);
     loadElderMeasurements(selectedElderId);
@@ -1079,8 +1033,6 @@ document.addEventListener('click', function (event) {
   if (target) { openElderMeasurementForm(target.dataset.elderMeasure); return; }
   target = event.target.closest('[data-elder-measure-save]');
   if (target) { saveElderMeasurement(target.dataset.elderMeasureSave, target); return; }
-  target = event.target.closest('[data-elder-note-save]');
-  if (target) { saveElderVisitNote(target); return; }
   target = event.target.closest('[data-export]');
   if (target) { exportMeetingData(target.dataset.export, target); return; }
   target = event.target.closest('[data-elder-graduate]');
@@ -1088,8 +1040,8 @@ document.addEventListener('click', function (event) {
     confirmHistoryTransfer('lansia', Number(target.dataset.elderGraduate));
     return;
   }
-  if (event.target.closest('[data-elder-notes-retry]')) {
-    loadElderVisitNotes(selectedElderId);
+  if (event.target.closest('[data-elder-history-retry]')) {
+    loadElderVisitHistory(selectedElderId);
     return;
   }
   if (event.target.closest('[data-elder-measure-back]')) {
@@ -1191,9 +1143,6 @@ document.addEventListener('change', function (event) {
     elderMeasurementDate = event.target.value;
     render();
   }
-  if (event.target.id === 'elder-visit-note-date') {
-    elderVisitDate = event.target.value;
-  }
 });
 
 document.addEventListener('touchstart', function (event) {
@@ -1211,6 +1160,8 @@ document.addEventListener('touchend', function (event) {
   elderSwipeStart = null;
   if (Math.abs(deltaX) < 55 || Math.abs(deltaX) < Math.abs(deltaY) * 1.3) return;
   if (deltaX < 0 && elderSection === 'profil') switchElderSection('pengukuran');
+  else if (deltaX < 0 && elderSection === 'pengukuran') switchElderSection('riwayat');
+  else if (deltaX > 0 && elderSection === 'riwayat') switchElderSection('pengukuran');
   else if (deltaX > 0 && elderSection === 'pengukuran') switchElderSection('profil');
 }, { passive: true });
 

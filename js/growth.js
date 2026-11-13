@@ -161,7 +161,7 @@
   function tabsHtml() {
     var tabs = [
       ['profil', 'Profil'], ['pengukuran', 'Pengukuran'],
-      ['vitamin', 'Vitamin A'], ['catatan', 'Catatan Kunjungan']
+      ['vitamin', 'Vitamin A'], ['catatan', 'Riwayat Kunjungan']
     ];
     return '<div class="growth-tabs" role="tablist" aria-label="Detail balita">' +
       tabs.map(function (item) {
@@ -331,8 +331,8 @@
     });
     var dates = Object.keys(visits).sort().reverse();
     if (!dates.length) {
-      return '<div class="growth-empty"><span aria-hidden="true">🌸</span><b>Belum ada catatan kunjungan</b>' +
-        '<p>Catatan pengukuran dan Vitamin A yang disimpan akan tampil di sini.</p></div>';
+      return '<div class="growth-empty"><span aria-hidden="true">🌸</span><b>Belum ada riwayat kunjungan</b>' +
+        '<p>Riwayat pengukuran dan Vitamin A yang tercatat akan tampil di sini.</p></div>';
     }
     return '<div class="visit-timeline">' + dates.map(function (date) {
       var visit = visits[date];
