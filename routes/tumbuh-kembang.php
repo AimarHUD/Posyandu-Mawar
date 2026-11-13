@@ -19,6 +19,14 @@ if (empty($_SESSION['user'])) {
   exit;
 }
 
+$userStmt = $pdo->prepare('SELECT id FROM users WHERE id = ?');
+$userStmt->execute([$_SESSION['user']['id']]);
+if (!$userStmt->fetchColumn()) {
+  http_response_code(401);
+  echo json_encode(['error' => 'Sesi login tidak lagi berlaku. Silakan masuk kembali.']);
+  exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   http_response_code(405);
   header('Allow: POST');

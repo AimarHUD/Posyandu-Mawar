@@ -35,6 +35,14 @@ body {
   color: var(--text);
   font-family: "Nunito", "Segoe UI", sans-serif;
   -webkit-tap-highlight-color: transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+.sheet::-webkit-scrollbar {
+  display: none;
 }
 
 body {
@@ -151,6 +159,26 @@ header p {
   font-size: 14px;
   font-weight: 600;
   opacity: .94;
+}
+
+.manage-users-link {
+  display: inline-flex;
+  min-height: var(--tap-size);
+  align-items: center;
+  margin-top: 12px;
+  padding: 8px 14px;
+  border: 1px solid #ffffff80;
+  border-radius: 999px;
+  background: #ffffff18;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.manage-users-link:hover {
+  background: #ffffff30;
+  color: #fff;
 }
 
 main {
@@ -719,6 +747,8 @@ nav button.on {
   box-shadow: 0 -14px 44px #3b10201f;
   animation: sheet-in .28s ease both;
   overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .sheet h2 {
@@ -1929,5 +1959,196 @@ textarea.growth-input {
 
   .child-form-screen .child-page {
     min-height: 100vh;
+  }
+}
+
+@media (max-width: 430px) {
+  header {
+    padding: 18px 16px 20px;
+    border-radius: 0 0 26px 26px;
+  }
+
+  header h1 {
+    gap: 8px;
+    font-size: 19px;
+  }
+
+  header h1 span {
+    font-size: 21px;
+  }
+
+  header p {
+    margin-top: 8px;
+    font-size: 13px;
+  }
+
+  .logout,
+  .manage-users-link {
+    padding: 7px 11px;
+    font-size: 12px;
+  }
+
+  main {
+    padding: 17px 14px 26px;
+  }
+
+  .grid {
+    gap: 10px;
+  }
+
+  .stat {
+    padding: 14px 12px;
+    border-radius: 17px;
+  }
+
+  .stat b {
+    margin-bottom: 4px;
+    font-size: 26px;
+  }
+
+  .stat span {
+    font-size: 11px;
+  }
+
+  h2 {
+    margin: 22px 0 10px;
+    font-size: 17px;
+  }
+
+  .directory-tools {
+    gap: 7px;
+    margin-bottom: 11px;
+  }
+
+  .directory-search,
+  .directory-total {
+    min-height: 42px;
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+
+  .item {
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 11px;
+    border-radius: 16px;
+  }
+
+  .balita-item {
+    gap: 6px;
+    padding: 8px;
+    border-radius: 16px;
+  }
+
+  .balita-card-link {
+    gap: 7px;
+  }
+
+  .balita-card-link .av {
+    width: 38px;
+    height: 38px;
+  }
+
+  .av {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    font-size: 19px;
+  }
+
+  .info b {
+    font-size: 13px;
+  }
+
+  .info small {
+    font-size: 11px;
+  }
+
+  .badge {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  .growth-heading {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .growth-heading h2 {
+    font-size: 17px;
+  }
+
+  .growth-card {
+    margin-bottom: 10px;
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .growth-profile {
+    gap: 11px;
+  }
+
+  .growth-avatar,
+  .measure-icon {
+    width: 46px;
+    height: 46px;
+    font-size: 21px;
+  }
+
+  .growth-summary-grid {
+    gap: 8px;
+  }
+
+  .growth-summary {
+    min-height: 70px;
+    padding: 10px;
+  }
+
+  .measure-card {
+    min-height: 70px;
+    gap: 11px;
+    margin-bottom: 8px;
+    padding: 10px;
+    border-radius: 16px;
+  }
+
+  .fab {
+    min-width: 50px;
+    height: 50px;
+    padding: 0 15px;
+    border-radius: 17px;
+    font-size: 13px;
+  }
+
+  nav {
+    gap: 3px;
+    padding: 6px 10px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+
+  nav button {
+    min-height: 50px;
+    border-radius: 14px;
+    font-size: 10px;
+  }
+
+  .growth-tabs {
+    margin-bottom: 13px;
+  }
+
+  .growth-tabs button {
+    min-height: 44px;
+    padding: 8px 11px;
+    font-size: 12px;
+  }
+
+  .growth-button {
+    min-height: 46px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .sheet {
+    max-height: min(88vh, 720px);
+    padding: 20px 16px calc(18px + env(safe-area-inset-bottom, 0px));
   }
 }

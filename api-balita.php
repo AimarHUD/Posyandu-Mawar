@@ -15,6 +15,12 @@ try {
     respond(401, ['error' => 'Sesi login berakhir. Silakan masuk kembali.']);
   }
 
+  $userStmt = $pdo->prepare('SELECT id FROM users WHERE id = ?');
+  $userStmt->execute([$_SESSION['user']['id']]);
+  if (!$userStmt->fetchColumn()) {
+    respond(401, ['error' => 'Sesi login tidak lagi berlaku. Silakan masuk kembali.']);
+  }
+
   $columns = [
     'alamat' => 'TEXT NULL',
     'jenis_kelamin' => 'VARCHAR(10) NULL',
