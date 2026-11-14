@@ -27,9 +27,11 @@ var elderMeasurements = { personId: null, records: [], loading: false, error: ''
 var elderVisitHistory = { personId: null, records: [], loading: false, loaded: false, error: '' };
 var elderMeasurementTypes = {
   berat: { title: 'Berat Badan', unit: 'kg', image: 'assets/images/scale.svg', min: 1, max: 300, step: '0.01' },
-  tinggi: { title: 'Tinggi Badan', unit: 'cm', image: 'assets/images/stadiometer.svg', min: 50, max: 250, step: '0.1' },
   lingkar_perut: { title: 'Lingkar Perut', unit: 'cm', image: 'assets/images/waist-circumference.svg', min: 20, max: 250, step: '0.1' },
-  tekanan_darah: { title: 'Tekanan Darah', unit: 'mmHg', image: 'assets/images/blood-pressure.svg' }
+  tekanan_darah: { title: 'Tekanan Darah', unit: 'mmHg', image: 'assets/images/blood-pressure.svg' },
+  gula_darah: { title: 'Gula Darah', unit: 'mg/dL', image: 'assets/images/blood-glucose.svg', min: 20, max: 800, step: '1' },
+  kolesterol: { title: 'Kolesterol', unit: 'mg/dL', image: 'assets/images/cholesterol.svg', min: 50, max: 600, step: '1' },
+  asam_urat: { title: 'Asam Urat', unit: 'mg/dL', image: 'assets/images/uric-acid.svg', min: 1, max: 30, step: '0.1' }
 };
 var monthlyAttendance = { balita: null, lansia: null, monthLabel: '', loading: false, error: '' };
 
@@ -525,10 +527,13 @@ function elderMeasurementsHtml(person, records) {
       '<span class="measure-copy"><b>' + type.title + '</b><small>' + esc(value) +
       '</small></span><span class="measure-arrow" aria-hidden="true">›</span></button>';
   }).join('');
+  var supportedRecords = records.filter(function (item) {
+    return Object.prototype.hasOwnProperty.call(elderMeasurementTypes, item.jenis);
+  });
   var historyHtml = elderMeasurements.loading ? '<p class="growth-hint">Memuat riwayat pengukuran...</p>' :
     elderMeasurements.error ? '<div class="alert error-notice" role="alert">' + esc(elderMeasurements.error) +
       ' <button type="button" class="link" data-elder-measure-retry>Coba lagi</button></div>' :
-      records.length ? '<div class="elder-measure-history">' + records.map(function (item) {
+      supportedRecords.length ? '<div class="elder-measure-history">' + supportedRecords.map(function (item) {
         var type = elderMeasurementTypes[item.jenis];
         var value = item.jenis === 'tekanan_darah' ?
           item.sistolik + '/' + item.diastolik + ' mmHg' : item.nilai + ' ' + type.unit;

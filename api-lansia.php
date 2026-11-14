@@ -407,8 +407,10 @@ function saveLansiaMeasurement(PDO $pdo, array $input): array
   } else {
     $limits = [
       'berat' => [1, 300],
-      'tinggi' => [50, 250],
       'lingkar_perut' => [20, 250],
+      'kolesterol' => [50, 600],
+      'asam_urat' => [1, 30],
+      'gula_darah' => [20, 800],
     ];
     if (!isset($limits[$kind])) {
       throw new InvalidArgumentException('Jenis pengukuran tidak valid.');
