@@ -15,6 +15,12 @@ try {
     respondLansia(401, ['error' => 'Sesi login berakhir. Silakan masuk kembali.']);
   }
 
+  $userStmt = $pdo->prepare('SELECT id FROM users WHERE id = ?');
+  $userStmt->execute([$_SESSION['user']['id']]);
+  if (!$userStmt->fetchColumn()) {
+    respondLansia(401, ['error' => 'Sesi login tidak lagi berlaku. Silakan masuk kembali.']);
+  }
+
   $columns = [
     'jenis_kelamin' => 'VARCHAR(10) NULL',
     'nomor_kk' => 'VARCHAR(16) NULL',
@@ -401,8 +407,10 @@ function saveLansiaMeasurement(PDO $pdo, array $input): array
   } else {
     $limits = [
       'berat' => [1, 300],
-      'tinggi' => [50, 250],
       'lingkar_perut' => [20, 250],
+      'kolesterol' => [50, 600],
+      'asam_urat' => [1, 30],
+      'gula_darah' => [20, 800],
     ];
     if (!isset($limits[$kind])) {
       throw new InvalidArgumentException('Jenis pengukuran tidak valid.');

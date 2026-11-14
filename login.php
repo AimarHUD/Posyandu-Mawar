@@ -2,8 +2,24 @@
 require __DIR__ . '/config.php';
 
 if (!empty($_SESSION['user'])) {
-  header('Location: index.php');
-  exit;
+  $stmt = $pdo->prepare(
+    'SELECT id, nama, username, role FROM users WHERE id = ?'
+  );
+  $stmt->execute([$_SESSION['user']['id'] ?? 0]);
+  $existingUser = $stmt->fetch();
+
+  if ($existingUser) {
+    $_SESSION['user'] = [
+      'id' => $existingUser['id'],
+      'nama' => $existingUser['nama'],
+      'username' => $existingUser['username'],
+      'role' => $existingUser['role'],
+    ];
+    header('Location: index.php');
+    exit;
+  }
+
+  unset($_SESSION['user']);
 }
 
 if (empty($_SESSION['csrf'])) {
@@ -16,10 +32,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if (!hash_equals($_SESSION['csrf'], $_POST['csrf'] ?? '')) {
     $error = 'Sesi tidak valid, muat ulang halaman.';
   } else {
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
+    $username = is_string($_POST['username'] ?? null) ? trim($_POST['username']) : '';
+    $password = is_string($_POST['password'] ?? null) ? $_POST['password'] : '';
 
-    $stmt = $pdo->prepare('SELECT * FROM users WHERE username = ?');
+    $stmt = $pdo->prepare(
+      'SELECT id, nama, username, password, role FROM users WHERE username = ?'
+    );
     $stmt->execute([$username]);
     $user = $stmt->fetch();
 

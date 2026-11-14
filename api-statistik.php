@@ -15,6 +15,11 @@ try {
   if (empty($_SESSION['user'])) {
     respondStatistics(401, ['error' => 'Sesi login berakhir. Silakan masuk kembali.']);
   }
+  $userStmt = $pdo->prepare('SELECT id FROM users WHERE id = ?');
+  $userStmt->execute([$_SESSION['user']['id']]);
+  if (!$userStmt->fetchColumn()) {
+    respondStatistics(401, ['error' => 'Sesi login tidak lagi berlaku. Silakan masuk kembali.']);
+  }
   if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     header('Allow: GET');
     respondStatistics(405, ['error' => 'Metode permintaan tidak didukung.']);

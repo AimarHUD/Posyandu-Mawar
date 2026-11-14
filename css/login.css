@@ -273,6 +273,50 @@ body {
   }
 }
 
+@media (max-width: 575.98px) {
+  .login-card {
+    max-width: 430px;
+    min-height: 0;
+  }
+
+  .login-intro {
+    padding: 1.1rem !important;
+  }
+
+  .login-intro .brand-mark {
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 1.15rem;
+  }
+
+  .login-intro .intro-title {
+    font-size: 1.2rem;
+  }
+
+  .login-card > section:last-child {
+    padding: 1.25rem !important;
+  }
+
+  .form-content h2 {
+    font-size: 1.3rem;
+  }
+
+  .form-control.form-control-lg {
+    min-height: 2.8rem;
+    font-size: .95rem;
+  }
+
+  .btn-primary.btn-lg {
+    min-height: 44px;
+    padding: .5rem 1rem;
+    font-size: 1.05rem;
+  }
+
+  .form-content .mb-4 {
+    margin-bottom: 1rem !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

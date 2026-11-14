@@ -14,6 +14,11 @@ try {
   if (empty($_SESSION['user'])) {
     respondExportError(401, 'Sesi login berakhir. Silakan masuk kembali.');
   }
+  $userStmt = $pdo->prepare('SELECT id FROM users WHERE id = ?');
+  $userStmt->execute([$_SESSION['user']['id']]);
+  if (!$userStmt->fetchColumn()) {
+    respondExportError(401, 'Sesi login tidak lagi berlaku. Silakan masuk kembali.');
+  }
   if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     header('Allow: GET');
     respondExportError(405, 'Metode permintaan tidak didukung.');
@@ -106,14 +111,18 @@ try {
       ['status', 'Status', false],
       ['tanggal_ukur', 'Tanggal Pengukuran', false],
       ['berat', 'Berat Badan (kg)', true],
-      ['tinggi', 'Tinggi Badan (cm)', true],
       ['lingkar_perut', 'Lingkar Perut (cm)', true],
       ['sistolik', 'Sistolik (mmHg)', true],
       ['diastolik', 'Diastolik (mmHg)', true],
+      ['kolesterol', 'Kolesterol (mg/dL)', true],
+      ['asam_urat', 'Asam Urat (mg/dL)', true],
+      ['gula_darah', 'Gula Darah (mg/dL)', true],
       ['catatan_berat', 'Catatan Berat', false],
-      ['catatan_tinggi', 'Catatan Tinggi', false],
       ['catatan_lingkar_perut', 'Catatan Lingkar Perut', false],
       ['catatan_tekanan_darah', 'Catatan Tekanan Darah', false],
+      ['catatan_kolesterol', 'Catatan Kolesterol', false],
+      ['catatan_asam_urat', 'Catatan Asam Urat', false],
+      ['catatan_gula_darah', 'Catatan Gula Darah', false],
     ];
     $stmt = $pdo->prepare(
       'SELECT l.nama, l.jenis_kelamin, l.nomor_kk, l.nik, l.tanggal_lahir,
@@ -121,14 +130,18 @@ try {
               l.alamat, l.nomor_hp, l.nama_pendamping, l.nomor_hp_pendamping,
               l.status, p.tanggal_ukur,
               MAX(CASE WHEN p.jenis = \'berat\' THEN p.nilai END) AS berat,
-              MAX(CASE WHEN p.jenis = \'tinggi\' THEN p.nilai END) AS tinggi,
               MAX(CASE WHEN p.jenis = \'lingkar_perut\' THEN p.nilai END) AS lingkar_perut,
               MAX(CASE WHEN p.jenis = \'tekanan_darah\' THEN p.sistolik END) AS sistolik,
               MAX(CASE WHEN p.jenis = \'tekanan_darah\' THEN p.diastolik END) AS diastolik,
+              MAX(CASE WHEN p.jenis = \'kolesterol\' THEN p.nilai END) AS kolesterol,
+              MAX(CASE WHEN p.jenis = \'asam_urat\' THEN p.nilai END) AS asam_urat,
+              MAX(CASE WHEN p.jenis = \'gula_darah\' THEN p.nilai END) AS gula_darah,
               MAX(CASE WHEN p.jenis = \'berat\' THEN p.catatan END) AS catatan_berat,
-              MAX(CASE WHEN p.jenis = \'tinggi\' THEN p.catatan END) AS catatan_tinggi,
               MAX(CASE WHEN p.jenis = \'lingkar_perut\' THEN p.catatan END) AS catatan_lingkar_perut,
-              MAX(CASE WHEN p.jenis = \'tekanan_darah\' THEN p.catatan END) AS catatan_tekanan_darah
+              MAX(CASE WHEN p.jenis = \'tekanan_darah\' THEN p.catatan END) AS catatan_tekanan_darah,
+              MAX(CASE WHEN p.jenis = \'kolesterol\' THEN p.catatan END) AS catatan_kolesterol,
+              MAX(CASE WHEN p.jenis = \'asam_urat\' THEN p.catatan END) AS catatan_asam_urat,
+              MAX(CASE WHEN p.jenis = \'gula_darah\' THEN p.catatan END) AS catatan_gula_darah
        FROM lansia l
        JOIN pengukuran_lansia p ON p.lansia_id = l.id
        WHERE p.tanggal_ukur = ?

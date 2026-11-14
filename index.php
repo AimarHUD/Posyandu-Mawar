@@ -25,6 +25,9 @@ if (empty($_SESSION['growth_csrf'])) {
       <a class="logout" href="logout.php">Keluar <span aria-hidden="true">⏻</span></a>
     </div>
     <p id="sub">Halo, <?= htmlspecialchars($_SESSION['user']['nama']) ?></p>
+    <?php if ($_SESSION['user']['role'] === 'admin'): ?>
+      <a class="manage-users-link" href="users.php">Kelola User</a>
+    <?php endif; ?>
   </header>
   <main id="view"></main>
   <button class="fab" id="fab" aria-label="Tambah data">+</button>
