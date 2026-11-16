@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(50) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
   role ENUM('admin','kader') NOT NULL DEFAULT 'kader',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_balita_nik (nik)
 );
 
 INSERT INTO users (nama, username, password, role)
@@ -41,7 +42,8 @@ CREATE TABLE IF NOT EXISTS balita (
   lingkar_lengan_lahir DECIMAL(5,2) NULL,
   lulus_manual TINYINT(1) NOT NULL DEFAULT 0,
   nama_ortu VARCHAR(100),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_lansia_nik (nik)
 );
 
 CREATE TABLE IF NOT EXISTS lansia (

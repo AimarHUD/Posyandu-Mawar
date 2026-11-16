@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . '/../lib/db-lock.php';
 require_once __DIR__ . '/../models/Balita.php';
 require_once __DIR__ . '/../models/Pengukuran.php';
 require_once __DIR__ . '/../models/VitaminA.php';
@@ -14,6 +15,13 @@ final class TumbuhKembangController
   }
 
   public function handle(array $input): array
+  {
+    return withDbLock($this->pdo, 'posyandu_balita_write', function () use ($input) {
+      return $this->process($input);
+    });
+  }
+
+  private function process(array $input): array
   {
     $profile = $input['balita'] ?? null;
     if (!is_array($profile)) {

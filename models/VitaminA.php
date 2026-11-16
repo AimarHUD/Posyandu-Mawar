@@ -35,6 +35,27 @@ final class VitaminA
 
   public static function create(PDO $pdo, int $balitaId, array $record): void
   {
+    if ($record['sudah_diberikan'] && $record['tanggal_pemberian'] !== null) {
+      $same = $pdo->prepare(
+        'SELECT 1 FROM vitamin_a
+         WHERE balita_id = ? AND jenis_kapsul = ? AND tanggal_pemberian = ? LIMIT 1'
+      );
+      $same->execute([$balitaId, $record['jenis_kapsul'], $record['tanggal_pemberian']]);
+      if ($same->fetchColumn()) {
+        return;
+      }
+    } else {
+      $latest = $pdo->prepare(
+        'SELECT sudah_diberikan FROM vitamin_a WHERE balita_id = ? AND jenis_kapsul = ?
+         ORDER BY COALESCE(tanggal_pemberian, DATE(created_at)) DESC, id DESC LIMIT 1'
+      );
+      $latest->execute([$balitaId, $record['jenis_kapsul']]);
+      $latestStatus = $latest->fetchColumn();
+      if ($latestStatus !== false && (int) $latestStatus === 0) {
+        return;
+      }
+    }
+
     $stmt = $pdo->prepare(
       'INSERT INTO vitamin_a (balita_id, jenis_kapsul, sudah_diberikan, tanggal_pemberian)
        VALUES (?, ?, ?, ?)'

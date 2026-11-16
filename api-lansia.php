@@ -10,6 +10,7 @@ function respondLansia(int $status, array $body): void
 
 try {
   require __DIR__ . '/config.php';
+  require_once __DIR__ . '/lib/db-lock.php';
 
   if (empty($_SESSION['user'])) {
     respondLansia(401, ['error' => 'Sesi login berakhir. Silakan masuk kembali.']);
@@ -218,18 +219,23 @@ try {
     $guardianPhone !== '' ? $guardianPhone : null,
   ];
 
-  if ($id) {
-    $stmt = $pdo->prepare(
-      'UPDATE lansia SET nama = ?, tanggal_lahir = ?, alamat = ?, jenis_kelamin = ?,
-       nomor_kk = ?, nik = ?, nomor_hp = ?, nama_pendamping = ?, nomor_hp_pendamping = ? WHERE id = ?'
-    );
-    $stmt->execute(array_merge($values, [$id]));
-    $stmt = $pdo->prepare('SELECT id FROM lansia WHERE id = ?');
-    $stmt->execute([$id]);
-    if (!$stmt->fetchColumn()) {
-      respondLansia(404, ['error' => 'Data lansia tidak ditemukan.']);
+  $conflict = withDbLock($pdo, 'posyandu_lansia_write', function () use (
+    $pdo, &$id, $values, $name, $birthDate, $nik
+  ) {
+    $duplicate = findDuplicateLansia($pdo, $name, $birthDate, $nik, $id ?: null);
+    if ($duplicate) {
+      return ['duplicate' => $duplicate];
     }
-  } else {
+    if ($id) {
+      $stmt = $pdo->prepare(
+        'UPDATE lansia SET nama = ?, tanggal_lahir = ?, alamat = ?, jenis_kelamin = ?,
+         nomor_kk = ?, nik = ?, nomor_hp = ?, nama_pendamping = ?, nomor_hp_pendamping = ? WHERE id = ?'
+      );
+      $stmt->execute(array_merge($values, [$id]));
+      $stmt = $pdo->prepare('SELECT id FROM lansia WHERE id = ?');
+      $stmt->execute([$id]);
+      return $stmt->fetchColumn() ? null : ['notFound' => true];
+    }
     $stmt = $pdo->prepare(
       'INSERT INTO lansia
        (nama, tanggal_lahir, alamat, jenis_kelamin, nomor_kk, nik, nomor_hp, nama_pendamping, nomor_hp_pendamping)
@@ -237,6 +243,13 @@ try {
     );
     $stmt->execute($values);
     $id = (int)$pdo->lastInsertId();
+    return null;
+  });
+  if (!empty($conflict['notFound'])) {
+    respondLansia(404, ['error' => 'Data lansia tidak ditemukan.']);
+  }
+  if (!empty($conflict['duplicate'])) {
+    respondLansia(409, ['error' => duplicateLansiaMessage($conflict['duplicate'], $nik)]);
   }
 
   $stmt = $pdo->prepare(
@@ -248,6 +261,9 @@ try {
   respondLansia(200, ['data' => formatLansia($stmt->fetch())]);
 } catch (Throwable $error) {
   error_log('api-lansia.php: ' . $error->getMessage());
+  if ($error instanceof PDOException && (int)($error->errorInfo[1] ?? 0) === 1062) {
+    respondLansia(409, ['error' => 'Data yang sama baru saja disimpan pengguna lain. Muat ulang halaman lalu periksa daftar lansia.']);
+  }
   respondLansia(500, ['error' => 'Terjadi kesalahan saat mengakses data lansia. Periksa koneksi database.']);
 }
 
@@ -296,6 +312,14 @@ function saveLansiaVisitNote(PDO $pdo, array $input): array
     $date < $birthDate
   ) {
     respondLansia(422, ['error' => 'Tanggal kunjungan tidak valid.']);
+  }
+  $stmt = $pdo->prepare(
+    'SELECT 1 FROM catatan_kunjungan_lansia
+     WHERE lansia_id = ? AND tanggal_kunjungan = ? AND catatan = ? LIMIT 1'
+  );
+  $stmt->execute([$id, $date, trim($noteValue)]);
+  if ($stmt->fetchColumn()) {
+    return fetchLansiaVisitTimeline($pdo, $id);
   }
   $stmt = $pdo->prepare(
     'INSERT INTO catatan_kunjungan_lansia (lansia_id, tanggal_kunjungan, catatan)
@@ -428,12 +452,30 @@ function saveLansiaMeasurement(PDO $pdo, array $input): array
     $value = round((float)$value, 2);
   }
 
-  $stmt = $pdo->prepare(
-    'INSERT INTO pengukuran_lansia
-     (lansia_id, jenis, nilai, sistolik, diastolik, tanggal_ukur, catatan)
-     VALUES (?, ?, ?, ?, ?, ?, ?)'
-  );
-  $stmt->execute([$id, $kind, $value, $systolic, $diastolic, $date, $note === '' ? null : $note]);
+  $noteOrNull = $note === '' ? null : $note;
+  withDbLock($pdo, 'posyandu_lansia_measurement_write', function () use (
+    $pdo, $id, $kind, $value, $systolic, $diastolic, $date, $noteOrNull
+  ) {
+    $stmt = $pdo->prepare(
+      'SELECT id FROM pengukuran_lansia
+       WHERE lansia_id = ? AND jenis = ? AND tanggal_ukur = ? ORDER BY id DESC LIMIT 1'
+    );
+    $stmt->execute([$id, $kind, $date]);
+    $existingId = $stmt->fetchColumn();
+    if ($existingId) {
+      $stmt = $pdo->prepare(
+        'UPDATE pengukuran_lansia SET nilai = ?, sistolik = ?, diastolik = ?, catatan = ? WHERE id = ?'
+      );
+      $stmt->execute([$value, $systolic, $diastolic, $noteOrNull, $existingId]);
+      return;
+    }
+    $stmt = $pdo->prepare(
+      'INSERT INTO pengukuran_lansia
+       (lansia_id, jenis, nilai, sistolik, diastolik, tanggal_ukur, catatan)
+       VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    $stmt->execute([$id, $kind, $value, $systolic, $diastolic, $date, $noteOrNull]);
+  });
 
   $stmt = $pdo->prepare(
     'SELECT id, jenis, nilai, sistolik, diastolik, tanggal_ukur, catatan
@@ -441,4 +483,32 @@ function saveLansiaMeasurement(PDO $pdo, array $input): array
   );
   $stmt->execute([$id]);
   return $stmt->fetchAll();
+}
+
+function findDuplicateLansia(PDO $pdo, string $name, string $birthDate, string $nik, ?int $excludeId): ?array
+{
+  $sql = 'SELECT id, nama, tanggal_lahir, nik FROM lansia WHERE ((nama = ? AND tanggal_lahir = ?)';
+  $params = [$name, $birthDate];
+  if ($nik !== '') {
+    $sql .= ' OR nik = ?';
+    $params[] = $nik;
+  }
+  $sql .= ')';
+  if ($excludeId) {
+    $sql .= ' AND id <> ?';
+    $params[] = $excludeId;
+  }
+  $stmt = $pdo->prepare($sql . ' ORDER BY id ASC LIMIT 1');
+  $stmt->execute($params);
+  $row = $stmt->fetch();
+  return $row ?: null;
+}
+
+function duplicateLansiaMessage(array $row, string $nik): string
+{
+  if ($nik !== '' && $row['nik'] === $nik) {
+    return 'NIK ' . $nik . ' sudah terdaftar atas nama ' . $row['nama'] . '. Gunakan data yang sudah ada.';
+  }
+  return 'Lansia atas nama ' . $row['nama'] . ' dengan tanggal lahir ' . $row['tanggal_lahir'] .
+    ' sudah terdaftar. Gunakan data yang sudah ada.';
 }

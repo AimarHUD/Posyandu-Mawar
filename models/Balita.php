@@ -51,6 +51,15 @@ final class Balita
     }
 
     $stmt = $pdo->prepare(
+      'SELECT id FROM balita WHERE nama = ? AND tanggal_lahir = ? ORDER BY id ASC LIMIT 1'
+    );
+    $stmt->execute([$name, $birthday]);
+    $existingId = $stmt->fetchColumn();
+    if ($existingId) {
+      return (int) $existingId;
+    }
+
+    $stmt = $pdo->prepare(
       'INSERT INTO balita (nama, tanggal_lahir, nama_ortu, alamat, lingkar_lengan_lahir)
        VALUES (?, ?, ?, ?, ?)'
     );
