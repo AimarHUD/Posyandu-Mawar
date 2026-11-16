@@ -10,6 +10,7 @@ function respond(int $status, array $body): void
 
 try {
   require __DIR__ . '/config.php';
+  require_once __DIR__ . '/lib/db-lock.php';
 
   if (empty($_SESSION['user'])) {
     respond(401, ['error' => 'Sesi login berakhir. Silakan masuk kembali.']);
@@ -174,23 +175,28 @@ try {
     }
   }
 
-  if ($id) {
-    $legacyParentUpdate = $hasLegacyParent ? ', nama_ortu = ?' : '';
-    $stmt = $pdo->prepare(
-      'UPDATE balita SET nama = ?, tanggal_lahir = ?, alamat = ?, jenis_kelamin = ?,
-       anak_ke = ?, nomor_kk = ?, nik = ?, nama_ibu = ?, nama_ayah = ?, imd = ?, berat_lahir = ?, panjang_lahir = ?,
-       lingkar_kepala_lahir = ?, lingkar_lengan_lahir = ?' . $legacyParentUpdate . ' WHERE id = ?'
-    );
-    $stmt->execute(array_merge(
-      $values,
-      $hasLegacyParent ? [$legacyParent !== '' ? $legacyParent : null, $id] : [$id]
-    ));
-    $exists = $pdo->prepare('SELECT id FROM balita WHERE id = ?');
-    $exists->execute([$id]);
-    if (!$exists->fetchColumn()) {
-      respond(404, ['error' => 'Data balita tidak ditemukan.']);
+  $conflict = withDbLock($pdo, 'posyandu_balita_write', function () use (
+    $pdo, &$id, $values, $name, $birthDate, $nik, $hasLegacyParent, $legacyParent
+  ) {
+    $duplicate = findDuplicateBalita($pdo, $name, $birthDate, $nik, $id ?: null);
+    if ($duplicate) {
+      return ['duplicate' => $duplicate];
     }
-  } else {
+    if ($id) {
+      $legacyParentUpdate = $hasLegacyParent ? ', nama_ortu = ?' : '';
+      $stmt = $pdo->prepare(
+        'UPDATE balita SET nama = ?, tanggal_lahir = ?, alamat = ?, jenis_kelamin = ?,
+         anak_ke = ?, nomor_kk = ?, nik = ?, nama_ibu = ?, nama_ayah = ?, imd = ?, berat_lahir = ?, panjang_lahir = ?,
+         lingkar_kepala_lahir = ?, lingkar_lengan_lahir = ?' . $legacyParentUpdate . ' WHERE id = ?'
+      );
+      $stmt->execute(array_merge(
+        $values,
+        $hasLegacyParent ? [$legacyParent !== '' ? $legacyParent : null, $id] : [$id]
+      ));
+      $exists = $pdo->prepare('SELECT id FROM balita WHERE id = ?');
+      $exists->execute([$id]);
+      return $exists->fetchColumn() ? null : ['notFound' => true];
+    }
     $stmt = $pdo->prepare(
       'INSERT INTO balita
        (nama, tanggal_lahir, alamat, jenis_kelamin, anak_ke, nomor_kk, nik, nama_ibu, nama_ayah, imd,
@@ -201,6 +207,13 @@ try {
       $hasLegacyParent && $legacyParent !== '' ? $legacyParent : null,
     ]));
     $id = (int)$pdo->lastInsertId();
+    return null;
+  });
+  if (!empty($conflict['notFound'])) {
+    respond(404, ['error' => 'Data balita tidak ditemukan.']);
+  }
+  if (!empty($conflict['duplicate'])) {
+    respond(409, ['error' => duplicateBalitaMessage($conflict['duplicate'], $nik)]);
   }
 
   $stmt = $pdo->prepare(
@@ -213,6 +226,9 @@ try {
   respond(200, ['data' => formatBalita($stmt->fetch())]);
 } catch (Throwable $error) {
   error_log('api-balita.php: ' . $error->getMessage());
+  if ($error instanceof PDOException && (int)($error->errorInfo[1] ?? 0) === 1062) {
+    respond(409, ['error' => 'Data yang sama baru saja disimpan pengguna lain. Muat ulang halaman lalu periksa daftar balita.']);
+  }
   respond(500, ['error' => 'Terjadi kesalahan saat mengakses data balita. Periksa koneksi database.']);
 }
 
@@ -237,4 +253,32 @@ function formatBalita(array $row): array
     'lingkarLenganLahir' => $row['lingkar_lengan_lahir'],
     'lulusManual' => (bool)$row['lulus_manual'],
   ];
+}
+
+function findDuplicateBalita(PDO $pdo, string $name, string $birthDate, string $nik, ?int $excludeId): ?array
+{
+  $sql = 'SELECT id, nama, tanggal_lahir, nik FROM balita WHERE ((nama = ? AND tanggal_lahir = ?)';
+  $params = [$name, $birthDate];
+  if ($nik !== '') {
+    $sql .= ' OR nik = ?';
+    $params[] = $nik;
+  }
+  $sql .= ')';
+  if ($excludeId) {
+    $sql .= ' AND id <> ?';
+    $params[] = $excludeId;
+  }
+  $stmt = $pdo->prepare($sql . ' ORDER BY id ASC LIMIT 1');
+  $stmt->execute($params);
+  $row = $stmt->fetch();
+  return $row ?: null;
+}
+
+function duplicateBalitaMessage(array $row, string $nik): string
+{
+  if ($nik !== '' && $row['nik'] === $nik) {
+    return 'NIK ' . $nik . ' sudah terdaftar atas nama ' . $row['nama'] . '. Gunakan data yang sudah ada.';
+  }
+  return 'Balita atas nama ' . $row['nama'] . ' dengan tanggal lahir ' . $row['tanggal_lahir'] .
+    ' sudah terdaftar. Gunakan data yang sudah ada.';
 }

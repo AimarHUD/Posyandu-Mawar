@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">
+  <style>
+    .wide { display: none; }
+    @media (min-aspect-ratio: 1/1) {
+      .portrait { display: none; }
+      .wide { display: inline; }
+    }
+    .outline {
+      fill: none;
+      stroke: #ee9bb8;
+      stroke-width: 4.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .plus { fill: #a9d8be; }
+  </style>
+
+  <g class="portrait">
+    <g class="outline" transform="translate(584 53) rotate(-12)">
+      <rect x="0" y="0" width="72" height="32" rx="16"/>
+      <path d="M36 1v30"/>
+    </g>
+    <g class="outline" transform="translate(315 142) rotate(25)">
+      <path d="M12 14a18 18 0 0 1 36 0v42a26 26 0 1 1-36 0z"/>
+      <path d="M30 35v40m-10 0h20"/>
+    </g>
+    <g class="outline" transform="translate(490 118)">
+      <path d="M12 8v44a20 20 0 0 0 40 0V30"/>
+      <path d="M52 30V12a10 10 0 1 1 10 10"/>
+      <circle cx="32" cy="68" r="13"/>
+      <circle cx="62" cy="22" r="4"/>
+    </g>
+    <g class="outline" transform="translate(300 382) rotate(-20)">
+      <path d="M0 17h18m0-10v20m0-16h52v32H18m52-16h18m-58-16v32m18-32v32m18-32v32"/>
+    </g>
+    <g class="outline" transform="translate(560 770) rotate(40)">
+      <rect x="0" y="0" width="72" height="32" rx="16"/>
+      <path d="M36 1v30"/>
+    </g>
+    <g class="outline" transform="translate(448 837) rotate(-30)">
+      <rect x="0" y="0" width="72" height="30" rx="15"/>
+      <path d="M36 1v28"/>
+    </g>
+    <g class="outline" transform="translate(320 875) rotate(-30)">
+      <path d="M12 14a18 18 0 0 1 36 0v42a26 26 0 1 1-36 0z"/>
+      <path d="M30 35v40m-10 0h20"/>
+    </g>
+    <g class="outline" transform="translate(568 890) rotate(-20)">
+      <path d="M0 17h18m0-10v20m0-16h52v32H18m52-16h18m-58-16v32m18-32v32m18-32v32"/>
+    </g>
+    <path class="plus" d="M344 56h11v-11h11v11h11v11h-11v11h-11v-11h-11z"/>
+    <path class="plus" d="M628 170h18v-18h18v18h18v18h-18v18h-18v-18h-18z"/>
+    <path class="plus" d="M570 407h11v-11h11v11h11v11h-11v11h-11v-11h-11z"/>
+    <path class="plus" d="M344 788h11v-11h11v11h11v11h-11v11h-11v-11h-11z"/>
+  </g>
+
+  <g class="wide">
+    <g class="outline" transform="translate(840 185) rotate(-35)">
+      <rect x="0" y="0" width="116" height="38" rx="19"/>
+      <path d="M58 1v36"/>
+    </g>
+    <g class="outline" transform="translate(68 180) rotate(25)">
+      <path d="M12 14a18 18 0 0 1 36 0v42a26 26 0 1 1-36 0z"/>
+      <path d="M30 35v40m-10 0h20"/>
+    </g>
+    <g class="outline" transform="translate(470 165)">
+      <path d="M12 8v44a20 20 0 0 0 40 0V30"/>
+      <path d="M52 30V12a10 10 0 1 1 10 10"/>
+      <circle cx="32" cy="68" r="13"/>
+      <circle cx="62" cy="22" r="4"/>
+    </g>
+    <g class="outline" transform="translate(75 430) rotate(-20)">
+      <path d="M25 0v18m18-18v18M17 18h34v105H17zM17 42h34M34 123v25"/>
+    </g>
+    <g class="outline" transform="translate(850 605) rotate(40)">
+      <rect x="0" y="0" width="116" height="38" rx="19"/>
+      <path d="M58 1v36"/>
+    </g>
+    <g class="outline" transform="translate(425 750) rotate(-30)">
+      <rect x="0" y="0" width="112" height="36" rx="18"/>
+      <path d="M56 1v34"/>
+    </g>
+    <g class="outline" transform="translate(70 650) rotate(-30)">
+      <path d="M12 14a18 18 0 0 1 36 0v42a26 26 0 1 1-36 0z"/>
+      <path d="M30 35v40m-10 0h20"/>
+    </g>
+    <g class="outline" transform="translate(835 760) rotate(-20)">
+      <path d="M25 0v18m18-18v18M17 18h34v105H17zM17 42h34M34 123v25"/>
+    </g>
+    <path class="plus" d="M115 155h12v-12h12v12h12v12h-12v12h-12v-12h-12z"/>
+    <path class="plus" d="M820 245h18v-18h18v18h18v18h-18v18h-18v-18h-18z"/>
+    <path class="plus" d="M810 470h12v-12h12v12h12v12h-12v12h-12v-12h-12z"/>
+    <path class="plus" d="M115 750h12v-12h12v12h12v12h-12v12h-12v-12h-12z"/>
+  </g>
+</svg>

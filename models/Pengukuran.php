@@ -32,6 +32,25 @@ final class Pengukuran
 
   public static function create(PDO $pdo, int $balitaId, array $measurement): void
   {
+    $existing = $pdo->prepare(
+      'SELECT id FROM pengukuran
+       WHERE balita_id = ? AND jenis = ? AND tanggal_ukur = ? ORDER BY id DESC LIMIT 1'
+    );
+    $existing->execute([$balitaId, $measurement['jenis'], $measurement['tanggal_ukur']]);
+    $existingId = $existing->fetchColumn();
+    if ($existingId) {
+      $update = $pdo->prepare(
+        'UPDATE pengukuran SET nilai = ?, cara_ukur = ?, catatan = ? WHERE id = ?'
+      );
+      $update->execute([
+        $measurement['nilai'],
+        $measurement['cara_ukur'],
+        $measurement['catatan'],
+        $existingId,
+      ]);
+      return;
+    }
+
     $stmt = $pdo->prepare(
       'INSERT INTO pengukuran (balita_id, jenis, nilai, cara_ukur, tanggal_ukur, catatan)
        VALUES (?, ?, ?, ?, ?, ?)'
